@@ -1,0 +1,93 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Centered strictly within 66dp safe zone (21dp to 87dp, center at 54, 54) -->
+
+    <!-- 1. Drop shadow behind paper notebook sheet -->
+    <path
+        android:fillColor="#30000000"
+        android:pathData="M29,27 C29,24.5 31,22.5 33.5,22.5 L74.5,22.5 C77,22.5 79,24.5 79,27 L79,83 C79,85.5 77,87.5 74.5,87.5 L33.5,87.5 C31,87.5 29,85.5 29,83 Z" />
+
+    <!-- 2. Paper Notebook Sheet (White card) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,25 C28,22.5 30,20.5 32.5,20.5 L73.5,20.5 C76,20.5 78,22.5 78,25 L78,81 C78,83.5 76,85.5 73.5,85.5 L32.5,85.5 C30,85.5 28,83.5 28,81 Z" />
+
+    <!-- 3. Red left margin line of Vietnamese student notebook -->
+    <path
+        android:strokeColor="#EF4444"
+        android:strokeWidth="1.6"
+        android:pathData="M37.5,20.5 L37.5,85.5" />
+
+    <!-- 4. Blue Horizontal Writing Lines (Dòng kẻ vở ô ly) -->
+    <path
+        android:strokeColor="#BFDBFE"
+        android:strokeWidth="1.0"
+        android:pathData="M40.5,32 L73.5,32 M40.5,41 L73.5,41 M40.5,50 L73.5,50 M40.5,59 L73.5,59 M40.5,68 L73.5,68 M40.5,77 L73.5,77" />
+
+    <!-- 5. Handwriting simulation curves on lines -->
+    <path
+        android:strokeColor="#2563EB"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M42,39 Q45,36 49,39 T55,39 T61,39 T67,39" />
+    <path
+        android:strokeColor="#2563EB"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M42,48 Q46,45 50,48 T58,48 T64,48" />
+    <path
+        android:strokeColor="#2563EB"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M42,57 Q46,54 51,57 T57,57" />
+
+    <!-- 6. AI Detection Bounding Box (Khung nhận diện AI bóc tách lỗi) -->
+    <path
+        android:strokeColor="#DC2626"
+        android:strokeWidth="1.6"
+        android:fillColor="#22DC2626"
+        android:pathData="M40.5,44 L60.5,44 L60.5,52.5 L40.5,52.5 Z" />
+
+    <!-- 7. Gold Fountain Pen (Bút máy chấm bài vàng nổi bật) -->
+    <!-- Pen Barrel -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M64,48 L74,38 C75.5,36.5 78,36.5 79.5,38 L81,39.5 C82.5,41 82.5,43.5 81,45 L71,55 Z" />
+    <!-- Pen Metal Ring -->
+    <path
+        android:fillColor="#D97706"
+        android:pathData="M64,48 L66,46 L68,48 L66,50 Z" />
+    <!-- Pen Grip (Dark slate) -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M64,48 L71,55 L67,59 L60,52 Z" />
+    <!-- Pen Nib (Gold) -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M60,52 L67,59 L58,65 L57,62 Z" />
+    <!-- Nib Tip / Sparkle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M57,62 L58,65 L56,66 Z" />
+
+    <!-- 8. Teacher Grade 10 Star Stamp (Con dấu đỏ hoa điểm 10) -->
+    <!-- Stamp Red Base Circle -->
+    <path
+        android:fillColor="#DC2626"
+        android:pathData="M63,73 C63,68 67,64 72,64 C77,64 81,68 81,73 C81,78 77,82 72,82 C67,82 63,78 63,73 Z" />
+    <!-- Stamp White Inner Border -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="0.9"
+        android:pathData="M64.5,73 C64.5,68.9 67.9,65.5 72,65.5 C76.1,65.5 79.5,68.9 79.5,73 C79.5,77.1 76.1,80.5 72,80.5 C67.9,80.5 64.5,77.1 64.5,73 Z" />
+    <!-- Star Inside Stamp -->
+    <path
+        android:fillColor="#FEF08A"
+        android:pathData="M72,68.5 L73.2,71 L75.8,71.3 L73.9,73.1 L74.4,75.7 L72,74.4 L69.6,75.7 L70.1,73.1 L68.2,71.3 L70.8,71 Z" />
+</vector>

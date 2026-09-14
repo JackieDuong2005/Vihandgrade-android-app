@@ -1,0 +1,6 @@
+{
+  "name": "ViHand Grade",
+  "description": "Ứng dụng chấm bài viết tay tiểu học qua Edge Computing & AI cho Giải thưởng NCKH Euréka",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
