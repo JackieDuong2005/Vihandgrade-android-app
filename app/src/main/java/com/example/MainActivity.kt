@@ -211,7 +211,7 @@ fun ViHandGradeApp(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(if (activeTab == "camera") androidx.compose.foundation.layout.PaddingValues(0.dp) else innerPadding)
         ) {
             Crossfade(targetState = activeTab, label = "TabTransition") { tab ->
                 when (tab) {
