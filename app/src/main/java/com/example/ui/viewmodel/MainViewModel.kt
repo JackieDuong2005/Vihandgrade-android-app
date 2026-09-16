@@ -36,7 +36,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedErrorId = MutableStateFlow<String?>(SampleEssays.sample2Good.errors.firstOrNull()?.id)
     val selectedErrorId: StateFlow<String?> = _selectedErrorId.asStateFlow()
 
-    private val _isDarkTheme = MutableStateFlow(true)
+    private val _isDarkTheme = MutableStateFlow(false)
     val isDarkTheme: StateFlow<Boolean> = _isDarkTheme.asStateFlow()
 
     private val _serverUrl = MutableStateFlow(NetworkClient.DEFAULT_BASE_URL)

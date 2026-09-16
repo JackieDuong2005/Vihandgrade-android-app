@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ViHandGradeApp(
     viewModel: MainViewModel,
-    isDarkTheme: Boolean = true,
+    isDarkTheme: Boolean = false,
     onToggleTheme: () -> Unit = {}
 ) {
     val gradingState by viewModel.gradingState.collectAsStateWithLifecycle()
