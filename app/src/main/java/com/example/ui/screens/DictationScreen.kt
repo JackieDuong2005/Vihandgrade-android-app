@@ -99,15 +99,20 @@ fun DictationScreen(
     // TTS engine initialization
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
     DisposableEffect(Unit) {
-        val textToSpeech = TextToSpeech(context) { status ->
+        var textToSpeech: TextToSpeech? = null
+        textToSpeech = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                // Initialize Vietnamese if available
+                val viLocale = Locale("vi", "VN")
+                val res = textToSpeech?.setLanguage(viLocale)
+                if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    textToSpeech?.setLanguage(Locale.getDefault())
+                }
             }
         }
         tts = textToSpeech
         onDispose {
-            textToSpeech.stop()
-            textToSpeech.shutdown()
+            textToSpeech?.stop()
+            textToSpeech?.shutdown()
         }
     }
 

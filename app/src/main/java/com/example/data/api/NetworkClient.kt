@@ -21,9 +21,10 @@ object NetworkClient {
 
     val okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(2, TimeUnit.SECONDS)
+        .readTimeout(3, TimeUnit.SECONDS)
+        .writeTimeout(3, TimeUnit.SECONDS)
+        .callTimeout(3, TimeUnit.SECONDS)
         .build()
 
     fun createService(baseUrl: String = DEFAULT_BASE_URL): GradeApiService {

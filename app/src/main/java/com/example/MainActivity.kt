@@ -3,6 +3,7 @@ package com.example
 import android.graphics.Bitmap
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,7 +59,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Settings
-import com.example.data.model.GradeResult
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.window.Dialog
+import androidx.compose.runtime.LaunchedEffect
 import com.example.data.repository.SampleEssays
 import com.example.ui.screens.CameraScanScreen
 import com.example.ui.screens.DictationScreen
@@ -107,25 +114,31 @@ fun ViHandGradeApp(
     // 5 Screen tabs matching the HTML Mockup: "home" (default), "grade", "camera", "dictation", "settings"
     var activeTab by remember { mutableStateOf("home") }
 
-    // When grading succeeds, automatically jump to grade tab
-    if (currentResult != null && activeTab != "grade" && gradingState is GradingUiState.Success) {
-        activeTab = "grade"
+    // Intercept hardware/system back button so user is never trapped in any sub-screen
+    BackHandler(enabled = activeTab != "home") {
+        activeTab = "home"
+    }
+
+    // Only navigate to "grade" tab when grading state transitions to Success
+    LaunchedEffect(gradingState) {
+        if (gradingState is GradingUiState.Success) {
+            activeTab = "grade"
+        }
     }
 
     Scaffold(
         bottomBar = {
-            if (activeTab != "camera") {
-                // 5-Tab Bottom Navigation Bar matching HTML Mockup
-                // [1.Tổng quan] [2.Điểm số] [3.Chấm bài (Center)] [4.Chính tả] [5.Trạm Pi]
-                Surface(
-                    color = AppTheme.colors.card,
-                    tonalElevation = 8.dp,
-                    shadowElevation = 12.dp,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                ) {
+            // 5-Tab Bottom Navigation Bar matching HTML Mockup (always accessible across all screens)
+            // [1.Tổng quan] [2.Điểm số] [3.Chấm bài (Center)] [4.Chính tả] [5.Trạm Pi]
+            Surface(
+                color = AppTheme.colors.card,
+                tonalElevation = 8.dp,
+                shadowElevation = 12.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+            ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -203,15 +216,15 @@ fun ViHandGradeApp(
                         )
                     }
                 }
-            }
         },
         containerColor = AppTheme.colors.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(if (activeTab == "camera") androidx.compose.foundation.layout.PaddingValues(0.dp) else innerPadding)
+                .padding(bottom = innerPadding.calculateBottomPadding())
         ) {
             Crossfade(targetState = activeTab, label = "TabTransition") { tab ->
                 when (tab) {
@@ -298,6 +311,54 @@ fun ViHandGradeApp(
                                 activeTab = "grade"
                             }
                         )
+                    }
+                }
+            }
+
+            // Universal Processing Dialog across all tabs
+            if (gradingState is GradingUiState.Processing) {
+                val state = gradingState as GradingUiState.Processing
+                Dialog(onDismissRequest = {}) {
+                    Card(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = AppTheme.colors.card),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
+                        modifier = Modifier.fillMaxWidth(0.92f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(44.dp),
+                                strokeWidth = 3.5.dp,
+                                color = EmeraldPrimary
+                            )
+                            Spacer(modifier = Modifier.height(18.dp))
+                            Text(
+                                text = "ViHand AI Đang Chấm Bài",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = AppTheme.colors.textPrimary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = state.stepDescription,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.textMuted,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            LinearProgressIndicator(
+                                progress = { state.progress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(3.dp)),
+                                color = EmeraldPrimary,
+                                trackColor = AppTheme.colors.border
+                            )
+                        }
                     }
                 }
             }

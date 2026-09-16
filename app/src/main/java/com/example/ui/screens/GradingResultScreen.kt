@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Book
@@ -60,6 +62,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ErrorBox
@@ -336,7 +339,9 @@ fun GradingResultScreen(
                     if (result.errors.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -395,7 +400,10 @@ fun GradingResultScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.Warning,
                                         contentDescription = null,
@@ -407,9 +415,12 @@ fun GradingResultScreen(
                                         text = "Phát hiện chính tả: ${selectedError.errorType}",
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = AppTheme.colors.textPrimary
+                                        color = AppTheme.colors.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
                                     color = Color(0x336366F1),
@@ -417,12 +428,14 @@ fun GradingResultScreen(
                                 ) {
                                     Text(
                                         text = "ViT5 + YOLOv8",
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = AccentIndigo,
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                        fontSize = 10.sp
+                                        fontSize = 10.5.sp,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }
@@ -449,7 +462,7 @@ fun GradingResultScreen(
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Icon(
-                                        imageVector = Icons.Default.ArrowForward,
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                                         contentDescription = null,
                                         tint = AppTheme.colors.textMuted,
                                         modifier = Modifier.size(16.dp)
@@ -690,7 +703,7 @@ fun GradingResultScreen(
             }
 
             item {
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(48.dp))
             }
         }
         }

@@ -74,11 +74,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun gradeBitmap(bitmap: Bitmap, studentGrade: Int = 3) {
         viewModelScope.launch {
             _gradingState.value = GradingUiState.Processing("1/4. Tiền xử lý ảnh: Khử bóng, cân bằng trắng CLAHE...", 0.25f)
-            delay(400)
+            delay(150)
             _gradingState.value = GradingUiState.Processing("2/4. Google Gemini Flash Lite bóc tách văn bản chữ viết tay...", 0.50f)
-            delay(500)
+            delay(180)
             _gradingState.value = GradingUiState.Processing("3/4. YOLOv8 quét tọa độ Bounding Box từng từ viết tay...", 0.75f)
-            delay(450)
+            delay(150)
             _gradingState.value = GradingUiState.Processing("4/4. ViT5 & Qwen SLM kiểm tra chính tả & sinh lời nhận xét...", 0.90f)
 
             try {
@@ -99,7 +99,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun loadSample(sample: GradeResult) {
         viewModelScope.launch {
             _gradingState.value = GradingUiState.Processing("Đang tải dữ liệu bài thi mẫu Euréka...", 0.5f)
-            delay(300)
+            delay(100)
             _currentResult.value = sample
             _selectedErrorId.value = sample.errors.firstOrNull()?.id
             _gradingState.value = GradingUiState.Success(sample)

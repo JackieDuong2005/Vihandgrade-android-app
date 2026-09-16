@@ -582,56 +582,9 @@ fun HomeScreen(
         }
 
         item {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(48.dp))
         }
     }
-    }
-
-    // Processing Dialog
-    if (gradingState is GradingUiState.Processing) {
-        Dialog(onDismissRequest = {}) {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = AppTheme.colors.card),
-                border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
-                modifier = Modifier.fillMaxWidth(0.92f)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(48.dp),
-                        strokeWidth = 3.5.dp,
-                        color = EmeraldPrimary
-                    )
-                    Spacer(modifier = Modifier.height(18.dp))
-                    Text(
-                        text = "Trạm Raspberry Pi Đang Xử Lý",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = AppTheme.colors.textPrimary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = gradingState.stepDescription,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTheme.colors.textMuted,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    LinearProgressIndicator(
-                        progress = { gradingState.progress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        color = EmeraldPrimary,
-                        trackColor = AppTheme.colors.border
-                    )
-                }
-            }
-        }
     }
 }
 
