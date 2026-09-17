@@ -42,18 +42,35 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import com.example.ui.theme.EmeraldLight
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +91,20 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.camera.core.CameraControl
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import java.util.concurrent.Executors
 import com.example.ui.theme.EmeraldPrimary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -151,13 +182,117 @@ fun CameraScanScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
+
+    // CameraX permission & state
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var isLiveCameraMode by remember { mutableStateOf(hasCameraPermission) }
+    var showStudentDialog by remember { mutableStateOf(false) }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+        if (granted) {
+            isLiveCameraMode = true
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    var cameraLensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
+    var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var cameraControlInstance by remember { mutableStateOf<CameraControl?>(null) }
+    var previewViewInstance by remember { mutableStateOf<PreviewView?>(null) }
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+                if (cameraProviderFuture.isDone) {
+                    cameraProviderFuture.get().unbindAll()
+                }
+            } catch (_: Exception) {}
+            cameraExecutor.shutdown()
+        }
+    }
+
+    // Safely bind camera lifecycle to previewViewInstance using TextureView
+    LaunchedEffect(isLiveCameraMode, hasCameraPermission, cameraLensFacing, previewViewInstance, lifecycleOwner) {
+        val pView = previewViewInstance
+        if (isLiveCameraMode && hasCameraPermission && pView != null) {
+            try {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+                cameraProviderFuture.addListener({
+                    try {
+                        val cameraProvider = cameraProviderFuture.get()
+                        val preview = Preview.Builder().build().also {
+                            it.surfaceProvider = pView.surfaceProvider
+                        }
+                        val newImageCapture = ImageCapture.Builder()
+                            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                            .build()
+                        imageCapture = newImageCapture
+
+                        val cameraSelector = CameraSelector.Builder()
+                            .requireLensFacing(cameraLensFacing)
+                            .build()
+
+                        cameraProvider.unbindAll()
+                        val camera = cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview,
+                            newImageCapture
+                        )
+                        cameraControlInstance = camera.cameraControl
+                    } catch (_: Exception) {}
+                }, ContextCompat.getMainExecutor(context))
+            } catch (_: Exception) {}
+        } else if (!isLiveCameraMode) {
+            try {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+                if (cameraProviderFuture.isDone) {
+                    cameraProviderFuture.get().unbindAll()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    var isFlashOn by remember { mutableStateOf(false) }
+
+    // Sync torch with flash toggle
+    LaunchedEffect(isFlashOn, cameraControlInstance) {
+        try {
+            cameraControlInstance?.enableTorch(isFlashOn)
+        } catch (_: Exception) {}
+    }
 
     // Ratio Switcher state: "9:16", "full", "4:3"
     var selectedRatio by remember { mutableStateOf("9:16") }
-    var isFlashOn by remember { mutableStateOf(false) }
     var selectedSampleIndex by remember { mutableIntStateOf(0) }
     val currentPaper = samplePapers[selectedSampleIndex % samplePapers.size]
+
+    // Quick Student Bar & Grading Mode states
+    var selectedClass by remember { mutableStateOf("Lớp 3A1") }
+    var selectedStudent by remember { mutableStateOf("Nguyễn Bảo Nam") }
+    var isAnonymousMode by remember { mutableStateOf(false) }
+    var selectedGradingMode by remember { mutableStateOf("dictation") } // "dictation" (7-3) or "essay" (4-3-2-1)
+    var showClassDropdown by remember { mutableStateOf(false) }
+    var showStudentDropdown by remember { mutableStateOf(false) }
+
+    val classOptions = listOf("Lớp 3A1", "Lớp 3A2", "Lớp 4B", "Lớp 5A")
+    val studentOptions = listOf("Nguyễn Bảo Nam", "Trần Mai Chi", "Lê Hoàng Khôi", "Nguyễn Văn An", "Phạm Thu Hà")
 
     // Visual camera shutter flash feedback
     var isFlashing by remember { mutableStateOf(false) }
@@ -225,7 +360,7 @@ fun CameraScanScreen(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             // ==========================================
-            // 1. THANH ĐIỀU KHIỂN TRÊN (cam-top-controls)
+            // 1. THANH ĐIỀU KHIỂN TRÊN TINH GỌN (cam-top-controls)
             // ==========================================
             Row(
                 modifier = Modifier
@@ -235,98 +370,124 @@ fun CameraScanScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Nút quay lại trang chủ (Back to Home)
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0x990B1120),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF)),
+                // Nút quay lại gọn gàng (Back Icon)
+                IconButton(
+                    onClick = { onClose() },
                     modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .clickable { onClose() }
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x990B1120))
+                        .border(1.dp, Color(0x33FFFFFF), CircleShape)
                         .testTag("close_camera_btn")
                 ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Quay lại",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Huy hiệu Chọn Lớp & Học Sinh tinh gọn (Consolidated Student & Class Chip)
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xCC0B1120),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isAnonymousMode) Color(0xFFF59E0B) else Color(0x4434D399)
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable { showStudentDialog = true }
+                        .testTag("cam_student_selector")
+                ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Quay lại trang chủ",
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            imageVector = if (isAnonymousMode) Icons.Default.VisibilityOff else Icons.Default.School,
+                            contentDescription = null,
+                            tint = if (isAnonymousMode) Color(0xFFF59E0B) else EmeraldPrimary,
+                            modifier = Modifier.size(15.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Trang chủ",
+                            text = if (isAnonymousMode) "Rọc phách ẩn danh" else "$selectedClass • $selectedStudent",
                             color = Color.White,
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
 
-                // Bộ đổi tỷ lệ 9:16 / Full / 4:3 (cam-ratio-switcher)
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = Color(0x990B1120),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x4434D399)),
-                    modifier = Modifier.testTag("cam_ratio_switcher")
+                // Nhóm nút bên phải: Tỷ lệ khung hình & Bật/Tắt Flash
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(3.dp),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        listOf("9:16" to "9:16", "full" to "Full", "4:3" to "4:3").forEach { (key, label) ->
-                            val isSelected = selectedRatio == key
-                            val btnBg = if (isSelected) EmeraldPrimary else Color.Transparent
-                            val textColor = if (isSelected) Color(0xFF064E3B) else Color(0xFF94A3B8)
-
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(btnBg)
-                                    .clickable { selectedRatio = key }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                                    .testTag("ratio_btn_$key"),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    color = textColor,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                    // Nút đổi tỷ lệ gọn gàng (cam_ratio_switcher)
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0x990B1120),
+                        border = BorderStroke(1.dp, Color(0x33FFFFFF)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable {
+                                selectedRatio = when (selectedRatio) {
+                                    "9:16" -> "4:3"
+                                    "4:3" -> "full"
+                                    else -> "9:16"
+                                }
                             }
-                        }
-                    }
-                }
-
-                // Nút Bật/Tắt Flash (Zap)
-                IconButton(
-                    onClick = { isFlashOn = !isFlashOn },
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(if (isFlashOn) Color(0x44F59E0B) else Color(0x770B1120))
-                        .border(
-                            1.dp,
-                            if (isFlashOn) Color(0xFFF59E0B) else Color(0x33FFFFFF),
-                            CircleShape
+                            .testTag("cam_ratio_switcher")
+                    ) {
+                        Text(
+                            text = when (selectedRatio) {
+                                "4:3" -> "4:3"
+                                "full" -> "Full"
+                                else -> "9:16"
+                            },
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp)
                         )
-                        .testTag("flash_toggle_btn")
-                ) {
-                    Icon(
-                        imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                        contentDescription = if (isFlashOn) "Tắt Flash" else "Bật Flash",
-                        tint = if (isFlashOn) Color(0xFFF59E0B) else Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    }
+
+                    // Nút Bật/Tắt Flash (Zap)
+                    IconButton(
+                        onClick = { isFlashOn = !isFlashOn },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(if (isFlashOn) Color(0x44F59E0B) else Color(0x770B1120))
+                            .border(
+                                1.dp,
+                                if (isFlashOn) Color(0xFFF59E0B) else Color(0x33FFFFFF),
+                                CircleShape
+                            )
+                            .testTag("flash_toggle_btn")
+                    ) {
+                        Icon(
+                            imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                            contentDescription = if (isFlashOn) "Tắt Flash" else "Bật Flash",
+                            tint = if (isFlashOn) Color(0xFFF59E0B) else Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
             // ==========================================
-            // 2. KHUNG NGẮM TÀI LIỆU CHÍNH GIỮA (viewfinder-main-area)
+            // 2. KHUNG NGẮM TÀI LIỆU RỘNG RÃI (viewfinder-main-area)
             // ==========================================
             Column(
                 modifier = Modifier
@@ -336,35 +497,31 @@ fun CameraScanScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // AI Detect Badge
+                // Subtle AI Guide Pill (ai_detect_badge)
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0xDD0B1120),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x5534D399)),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xBB0B1120),
+                    border = BorderStroke(1.dp, Color(0x3334D399)),
                     modifier = Modifier
                         .padding(bottom = 8.dp)
                         .testTag("ai_detect_badge")
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.CropFree,
                             contentDescription = null,
                             tint = EmeraldPrimary,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = when (selectedRatio) {
-                                "full" -> "AI Khung Toàn Cảnh (Full View)"
-                                "4:3" -> "AI Khung Chuẩn 4:3 (Tập Vở Ô Ly)"
-                                else -> "AI Khung Chuẩn 9:16 (Toàn Màn Hình)"
-                            },
+                            text = if (isLiveCameraMode) "Căn chỉnh bài viết vào khung chụp" else "Đang xem bài mẫu • ${currentPaper.title}",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Medium,
                             fontSize = 11.sp
                         )
                     }
@@ -379,7 +536,7 @@ fun CameraScanScreen(
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = Color(0xEE064E3B),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldPrimary),
+                        border = BorderStroke(1.dp, EmeraldPrimary),
                         modifier = Modifier.padding(bottom = 6.dp)
                     ) {
                         Text(
@@ -392,34 +549,91 @@ fun CameraScanScreen(
                     }
                 }
 
-                // Document Frame with dynamic aspect ratio
+                // Document Frame with dynamic aspect ratio - expansive & clean
                 val frameModifier = when (selectedRatio) {
                     "full" -> Modifier
-                        .fillMaxWidth(0.92f)
-                        .fillMaxHeight(0.68f)
+                        .fillMaxWidth(0.94f)
+                        .fillMaxHeight(0.78f)
                     "4:3" -> Modifier
-                        .fillMaxWidth(0.84f)
+                        .fillMaxWidth(0.90f)
                         .aspectRatio(3f / 4f)
                     else -> Modifier
-                        .fillMaxWidth(0.76f)
+                        .fillMaxWidth(0.86f)
                         .aspectRatio(9f / 16f)
                 }
 
                 Box(
                     modifier = frameModifier
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xFFFFFDF8)) // Ivory paper
+                        .background(if (isLiveCameraMode) Color.Black else Color(0xFFFFFDF8))
                         .border(1.5.dp, Color(0x4434D399), RoundedCornerShape(16.dp))
                         .testTag("document_viewfinder_frame")
                 ) {
-                    // Realistic Student Notebook Paper Preview
-                    NotebookPaperViewfinderCanvas(
-                        paperData = currentPaper,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (isLiveCameraMode) {
+                        if (hasCameraPermission) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    PreviewView(ctx).apply {
+                                        implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                                        scaleType = PreviewView.ScaleType.FILL_CENTER
+                                        previewViewInstance = this
+                                    }
+                                },
+                                onRelease = {
+                                    previewViewInstance = null
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            // Permission needed prompt
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = "Cần quyền truy cập Camera",
+                                    color = Color.White,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Cho phép ứng dụng sử dụng camera để quét bài viết tay của học sinh trực tiếp.",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 12.sp,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = EmeraldPrimary,
+                                    modifier = Modifier.clickable {
+                                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                    }
+                                ) {
+                                    Text(
+                                        text = "Cấp quyền Camera",
+                                        color = Color(0xFF064E3B),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // Realistic Student Notebook Paper Preview
+                        NotebookPaperViewfinderCanvas(
+                            paperData = currentPaper,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
 
                     // Flashlight illumination overlay when active
-                    if (isFlashOn) {
+                    if (isFlashOn && !isLiveCameraMode) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -442,64 +656,90 @@ fun CameraScanScreen(
                     ScanningLaserOverlay(modifier = Modifier.fillMaxSize())
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-                // Gyroscope Level Indicator Pill
+                // Compact Gyroscope / Alignment Status
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color(0xDD0B1120),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x4434D399)),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0x990B1120),
                     modifier = Modifier.testTag("gyro_level_pill")
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
                             tint = EmeraldPrimary,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(12.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Góc chụp chuẩn 90° • ${currentPaper.note}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = EmeraldPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.5.sp
+                            text = "Góc chuẩn 90°",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        // Mini spirit level balance bubble
-                        Box(
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clip(CircleShape)
-                                .background(Color(0x3334D399))
-                                .border(1.dp, EmeraldPrimary.copy(alpha = 0.6f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(EmeraldPrimary)
-                            )
-                        }
                     }
                 }
             }
 
             // ==========================================
-            // 3. THANH NÚT CHỤP PHÍA DƯỚI (cam-bottom-controls)
+            // 3. CHẾ ĐỘ CHẤM & NÚT CHỤP PHÍA DƯỚI (cam-bottom-controls)
             // ==========================================
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp, start = 24.dp, end = 24.dp, top = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(bottom = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Grading Mode Switcher (Chính tả vs Tập làm văn) đặt ngay trên nút chụp thuận tiện
+                Row(
+                    modifier = Modifier.padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(
+                        "dictation" to "CHÍNH TẢ",
+                        "essay" to "TẬP LÀM VĂN"
+                    ).forEach { (mode, title) ->
+                        val isSelected = selectedGradingMode == mode
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .clickable { selectedGradingMode = mode }
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = title,
+                                color = if (isSelected) EmeraldLight else Color(0xFF64748B),
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                letterSpacing = 1.sp
+                            )
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(top = 3.dp)
+                                        .size(width = 16.dp, height = 2.5.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(EmeraldPrimary)
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.height(5.5.dp))
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 24.dp, end = 24.dp, top = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 // Nút chọn từ thư viện ảnh (gallery-thumb-btn)
                 Box(
                     modifier = Modifier
@@ -551,9 +791,34 @@ fun CameraScanScreen(
                                 isFlashing = true
                                 delay(90)
                                 isFlashing = false
-                                // Instant capture bitmap
-                                val bitmap = getOrGenerateBitmap(selectedSampleIndex)
-                                onCapture(bitmap)
+
+                                if (isLiveCameraMode && hasCameraPermission && imageCapture != null) {
+                                    try {
+                                        imageCapture?.takePicture(
+                                            cameraExecutor,
+                                            object : ImageCapture.OnImageCapturedCallback() {
+                                                override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                                                    val bitmap = imageProxy.toBitmap()
+                                                    imageProxy.close()
+                                                    onCapture(bitmap)
+                                                }
+
+                                                override fun onError(exception: ImageCaptureException) {
+                                                    // Fallback to sample paper bitmap on error
+                                                    val fallbackBitmap = getOrGenerateBitmap(selectedSampleIndex)
+                                                    onCapture(fallbackBitmap)
+                                                }
+                                            }
+                                        )
+                                    } catch (_: Exception) {
+                                        val fallbackBitmap = getOrGenerateBitmap(selectedSampleIndex)
+                                        onCapture(fallbackBitmap)
+                                    }
+                                } else {
+                                    // Instant capture bitmap from sample paper
+                                    val bitmap = getOrGenerateBitmap(selectedSampleIndex)
+                                    onCapture(bitmap)
+                                }
                             }
                         }
                         .testTag("shutter_btn"),
@@ -575,7 +840,7 @@ fun CameraScanScreen(
                     }
                 }
 
-                // Nút đổi bài mẫu (cam-round-icon-btn)
+                // Nút đổi bài mẫu hoặc lật camera trước/sau (cam-round-icon-btn)
                 Box(
                     modifier = Modifier
                         .size(54.dp)
@@ -583,14 +848,25 @@ fun CameraScanScreen(
                         .background(Color(0x881E293B))
                         .border(1.5.dp, Color(0x66FFFFFF), CircleShape)
                         .clickable {
-                            selectedSampleIndex++
-                            val next = samplePapers[selectedSampleIndex % samplePapers.size]
-                            switchNotification = "Đã đổi bài: ${next.title}"
+                            if (isLiveCameraMode) {
+                                cameraLensFacing = if (cameraLensFacing == CameraSelector.LENS_FACING_BACK) {
+                                    CameraSelector.LENS_FACING_FRONT
+                                } else {
+                                    CameraSelector.LENS_FACING_BACK
+                                }
+                                switchNotification = if (cameraLensFacing == CameraSelector.LENS_FACING_BACK) {
+                                    "Đã chuyển Camera sau"
+                                } else {
+                                    "Đã chuyển Camera trước"
+                                }
+                            } else {
+                                selectedSampleIndex++
+                                val next = samplePapers[selectedSampleIndex % samplePapers.size]
+                                switchNotification = "Đã đổi bài: ${next.title}"
+                            }
                             coroutineScope.launch {
                                 delay(2200)
-                                if (switchNotification == "Đã đổi bài: ${next.title}") {
-                                    switchNotification = null
-                                }
+                                switchNotification = null
                             }
                         }
                         .testTag("switch_camera_btn"),
@@ -602,12 +878,12 @@ fun CameraScanScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Cameraswitch,
-                            contentDescription = "Đổi bài mẫu",
+                            contentDescription = if (isLiveCameraMode) "Lật Camera" else "Đổi bài mẫu",
                             tint = Color.White,
                             modifier = Modifier.size(24.dp)
                         )
                         Text(
-                            text = "Đổi bài",
+                            text = if (isLiveCameraMode) "Lật cam" else "Đổi bài",
                             color = Color(0xFFCBD5E1),
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Medium
@@ -615,6 +891,152 @@ fun CameraScanScreen(
                     }
                 }
             }
+        }
+    }
+
+    // Student & Class Selection Dialog (Teacher picks Class, Student, or Anonymous mode)
+        if (showStudentDialog) {
+            AlertDialog(
+                onDismissRequest = { showStudentDialog = false },
+                containerColor = Color(0xFF1E293B),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.School,
+                            contentDescription = null,
+                            tint = EmeraldPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Thiết lập bài chấm",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        // Anonymous switch
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isAnonymousMode) Color(0x33F59E0B) else Color(0x220F172A),
+                            border = BorderStroke(1.dp, if (isAnonymousMode) Color(0xFFF59E0B) else Color(0x33FFFFFF)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isAnonymousMode = !isAnonymousMode }
+                                .testTag("cam_anonymous_toggle")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Chấm rọc phách ẩn danh",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp
+                                    )
+                                    Text(
+                                        "Ẩn tên học sinh để chấm khách quan",
+                                        color = Color(0xFF94A3B8),
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Switch(
+                                    checked = isAnonymousMode,
+                                    onCheckedChange = { isAnonymousMode = it },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = Color(0xFFF59E0B)
+                                    )
+                                )
+                            }
+                        }
+
+                        if (!isAnonymousMode) {
+                            // Class selector chips
+                            Column {
+                                Text("Lớp học:", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.testTag("cam_class_selector")
+                                ) {
+                                    classOptions.forEach { cls ->
+                                        val isClsSelected = selectedClass == cls
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (isClsSelected) EmeraldPrimary else Color(0x33334155),
+                                            modifier = Modifier.clickable { selectedClass = cls }
+                                        ) {
+                                            Text(
+                                                text = cls,
+                                                color = if (isClsSelected) Color(0xFF064E3B) else Color.White,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Student list
+                            Column {
+                                Text("Học sinh:", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    studentOptions.forEach { std ->
+                                        val isStdSelected = selectedStudent == std
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (isStdSelected) Color(0x2210B981) else Color.Transparent,
+                                            border = BorderStroke(1.dp, if (isStdSelected) EmeraldPrimary else Color(0x22FFFFFF)),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    selectedStudent = std
+                                                    showStudentDialog = false
+                                                }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Person,
+                                                    contentDescription = null,
+                                                    tint = if (isStdSelected) EmeraldPrimary else Color(0xFF94A3B8),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = std,
+                                                    color = if (isStdSelected) EmeraldLight else Color.White,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (isStdSelected) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showStudentDialog = false }) {
+                        Text("Xác nhận", color = EmeraldPrimary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
         }
 
         // Camera shutter white flash feedback overlay

@@ -20,6 +20,11 @@ object SampleEssays {
             totalScore = 7.0f
         ),
         pedagogicalComment = "Em viết bài tương đối đều nét, trình bày sạch sẽ. Cần đặc biệt chú ý quy tắc phân biệt âm đầu ch/tr và thanh hỏi/ngã (chổ hoa -> trổ hoa, giửa trời -> giữa trời). Khuyên em luyện đọc thêm bài tập đọc hàng ngày để rèn từ láy chuẩn xác!",
+        pedagogicalComments = listOf(
+            "Em viết bài tương đối đều nét, trình bày sạch sẽ. Cần đặc biệt chú ý quy tắc phân biệt âm đầu ch/tr và thanh hỏi/ngã (chổ hoa -> trổ hoa, giửa trời -> giữa trời).",
+            "Cô khen Bảo Nam đã viết đúng tiến độ và nỗ lực hoàn thành bài thi. Em nhớ đọc kỹ lại các từ trước khi chấm hết bài nhé!",
+            "Chữ viết của em có nét tròn trịa, giữ lề vở tốt. Chỉ cần khắc phục 2 lỗi thanh hỏi ngã là bài thi sẽ đạt loại Xuất sắc!"
+        ),
         extractedText = """
 Buổi sáng mùa thu thật mát mẻ.
 Trên cành cây bàng, chim hót ríu rít.
@@ -80,6 +85,11 @@ Cây bàng ngoài sân trường đang trổ hoa.
             totalScore = 9.9f
         ),
         pedagogicalComment = "Bài viết xuất sắc! Nét chữ thanh thoát, giữ vở sạch đẹp đúng chuẩn chữ viết tiểu học. Câu văn giàu cảm xúc, sử dụng từ ngữ gợi cảm và biện pháp so sánh rất tự nhiên. Thầy cô khen ngợi em!",
+        pedagogicalComments = listOf(
+            "Bài viết xuất sắc! Nét chữ thanh thoát, giữ vở sạch đẹp đúng chuẩn chữ viết tiểu học. Thầy cô khen ngợi em!",
+            "Em có vốn từ vựng phong phú và cảm xúc dạt dào. Bài văn rất xứng đáng làm bài mẫu cho cả lớp noi theo!",
+            "Chữ viết nét thanh nét đậm chuẩn mực, giữ gìn sách vở cẩn thận. Tiếp tục phát huy nhé Mai Chi!"
+        ),
         extractedText = "Dưới ánh nắng ban mai rực rỡ, mái trường thân yêu của em hiện lên thật khang trang và tươi đẹp. Những hàng cây phượng vĩ xanh rì rì rào reo vui trong gió như đón chào chúng em mỗi sớm mai đến lớp.",
         correctedFullText = "Dưới ánh nắng ban mai rực rỡ, mái trường thân yêu của em hiện lên thật khang trang và tươi đẹp. Những hàng cây phượng vĩ xanh rì rì rào reo vui trong gió như đón chào chúng em mỗi sớm mai đến lớp.",
         errors = emptyList(),
@@ -103,6 +113,11 @@ Cây bàng ngoài sân trường đang trổ hoa.
             totalScore = 6.5f
         ),
         pedagogicalComment = "Em đã viết đủ số câu theo yêu cầu. Tuy nhiên cần rèn thêm cách cầm bút để giữ nét chữ ngay ngắn trên đường kẻ ô ly. Lưu ý phân biệt âm s/x và l/n khi viết (sớm mai, lẩn nấp). Em cố gắng lên nhé!",
+        pedagogicalComments = listOf(
+            "Em đã viết đủ số câu theo yêu cầu. Tuy nhiên cần rèn thêm cách cầm bút để giữ nét chữ ngay ngắn trên đường kẻ ô ly. Lưu ý phân biệt âm s/x nhé!",
+            "Cô nhận thấy Hoàng Khôi rất cố gắng hoàn thành bài viết. Em hãy chú ý viết nắn nót hơn để giữ gìn vở sạch chữ đẹp.",
+            "Bài viết cần rèn thêm về quy tắc phân biệt phụ âm đầu s/x. Mỗi ngày em hãy luyện viết 1 đoạn văn ngắn để tiến bộ nhanh nhé!"
+        ),
         extractedText = "Mùa gặt về, cánh đồng lúa chín vàng rực. Bác nông dân thức dậy từ xớm mai để ra đồng. Chú cào cào xanh nấp sâu dưới kẽ lá sen.",
         correctedFullText = "Mùa gặt về, cánh đồng lúa chín vàng rực. Bác nông dân thức dậy từ sớm mai để ra đồng. Chú cào cào xanh nấp sâu dưới kẽ lá sen.",
         errors = listOf(
@@ -153,6 +168,11 @@ Cây bàng ngoài sân trường đang trổ hoa.
             totalScore = 9.2f
         ),
         pedagogicalComment = "Em viết chữ ngay ngắn, sạch đẹp và đúng cự ly dòng kẻ ô ly. Em cần chú ý rèn thêm quy tắc viết hoa chữ cái đầu mỗi dòng thơ và phân biệt âm r/s nhé!",
+        pedagogicalComments = listOf(
+            "Em viết chữ ngay ngắn, sạch đẹp và đúng cự ly dòng kẻ ô ly. Chú ý rèn thêm quy tắc viết hoa chữ cái đầu mỗi dòng thơ!",
+            "Cô khen Văn An đã có ý thức rèn chữ rất tốt. Nét chữ tròn, rõ ràng và bài làm sáng sủa.",
+            "Bài thơ viết đều nét. Em nhớ viết hoa các chữ đầu dòng thơ ('Ru bà') và chú ý từ ngữ chính xác nhé!"
+        ),
         extractedText = """
 Ơi chích chòe ơi!
 Chim đừng hót nữa,

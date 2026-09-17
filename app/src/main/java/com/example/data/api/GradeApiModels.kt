@@ -7,6 +7,12 @@ import com.squareup.moshi.JsonClass
 data class GradeApiRequest(
     @Json(name = "imageBase64") val imageBase64: String,
     @Json(name = "studentGrade") val studentGrade: Int = 3,
+    @Json(name = "gradingMode") val gradingMode: String = "dictation",
+    @Json(name = "studentId") val studentId: String? = null,
+    @Json(name = "classId") val classId: String? = null,
+    @Json(name = "hinh_thuc") val hinhThuc: Float = 3.0f,
+    @Json(name = "noi_dung") val noiDung: Float = 2.0f,
+    @Json(name = "penalty_per_error") val penaltyPerError: Float = 0.5f,
     @Json(name = "essayType") val essayType: String = "spelling"
 )
 
@@ -22,7 +28,11 @@ data class ApiErrorBox(
     @Json(name = "y1") val y1: Float = 0f,
     @Json(name = "x2") val x2: Float = 0f,
     @Json(name = "y2") val y2: Float = 0f,
-    @Json(name = "lineNumber") val lineNumber: Int = 1
+    @Json(name = "lineNumber") val lineNumber: Int = 1,
+    @Json(name = "rel_x1") val relX1: Float? = null,
+    @Json(name = "rel_y1") val relY1: Float? = null,
+    @Json(name = "rel_w") val relW: Float? = null,
+    @Json(name = "rel_h") val relH: Float? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -39,8 +49,10 @@ data class GradeApiResponse(
     @Json(name = "status") val status: String? = "success",
     @Json(name = "essayTitle") val essayTitle: String? = null,
     @Json(name = "studentName") val studentName: String? = null,
+    @Json(name = "className") val className: String? = null,
     @Json(name = "criteria") val criteria: ApiCriteria? = null,
     @Json(name = "pedagogicalComment") val pedagogicalComment: String? = null,
+    @Json(name = "pedagogicalComments") val pedagogicalComments: List<String>? = null,
     @Json(name = "extractedText") val extractedText: String? = null,
     @Json(name = "correctedFullText") val correctedFullText: String? = null,
     @Json(name = "errors") val errors: List<ApiErrorBox>? = null,

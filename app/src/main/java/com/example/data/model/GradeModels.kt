@@ -11,7 +11,11 @@ data class ErrorBox(
     val y1: Float,
     val x2: Float,
     val y2: Float,
-    val lineNumber: Int = 1
+    val lineNumber: Int = 1,
+    val rel_x1: Float = x1,
+    val rel_y1: Float = y1,
+    val rel_w: Float = (x2 - x1).coerceAtLeast(0.05f),
+    val rel_h: Float = (y2 - y1).coerceAtLeast(0.04f)
 )
 
 data class GradeCriteria(
@@ -46,12 +50,14 @@ data class GradeResult(
     val essayTitle: String,
     val criteria: GradeCriteria,
     val pedagogicalComment: String,
+    val pedagogicalComments: List<String> = emptyList(),
     val extractedText: String,
     val correctedFullText: String,
     val errors: List<ErrorBox>,
     val processingTimeMs: Long = 1200L,
     val serverSource: String = "Raspberry Pi Server (Cloudflare)",
     val sampleImageResId: Int? = null,
+    val photoPath: String? = null,
     val isSample: Boolean = false,
     val sampleType: String? = null
 )

@@ -71,6 +71,7 @@ import com.example.ui.screens.DictationScreen
 import com.example.ui.screens.GradingResultScreen
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.ReportsAnalyticsScreen
 import com.example.ui.screens.ServerSettingsScreen
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.EmeraldPrimary
@@ -243,7 +244,8 @@ fun ViHandGradeApp(
                             onSelectHistoryItem = { record ->
                                 viewModel.loadSample(record)
                                 activeTab = "grade"
-                            }
+                            },
+                            onOpenReports = { activeTab = "reports" }
                         )
                     }
                     "camera" -> {
@@ -294,6 +296,12 @@ fun ViHandGradeApp(
                             onBack = { activeTab = "home" }
                         )
                     }
+                    "reports" -> {
+                        ReportsAnalyticsScreen(
+                            onNavigateToGrading = { activeTab = "grade" },
+                            onBack = { activeTab = "home" }
+                        )
+                    }
                     else -> {
                         HomeScreen(
                             gradingState = gradingState,
@@ -309,7 +317,8 @@ fun ViHandGradeApp(
                             onSelectHistoryItem = { record ->
                                 viewModel.loadSample(record)
                                 activeTab = "grade"
-                            }
+                            },
+                            onOpenReports = { activeTab = "reports" }
                         )
                     }
                 }

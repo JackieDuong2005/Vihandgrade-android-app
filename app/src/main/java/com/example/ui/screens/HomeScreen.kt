@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
@@ -77,6 +78,7 @@ fun HomeScreen(
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
     onSelectHistoryItem: (GradeResult) -> Unit,
+    onOpenReports: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Pulse animation for server online dot
@@ -392,6 +394,62 @@ fun HomeScreen(
                                 )
                             }
                         }
+                    }
+                }
+
+                // Nút mở Báo Cáo & Phân Tích Lớp Học GDPT 2018
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = AppTheme.colors.card,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onOpenReports() }
+                        .testTag("home_open_reports_btn")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(EmeraldPrimary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Assessment,
+                                    contentDescription = null,
+                                    tint = EmeraldPrimary,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Báo Cáo Phân Tích & Học Sinh Cần Kèm",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppTheme.colors.textPrimary
+                                )
+                                Text(
+                                    text = "Phát hiện lỗi s/x, hỏi/ngã theo GDPT 2018",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = AppTheme.colors.textMuted,
+                                    fontSize = 10.5.sp
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = AppTheme.colors.textMuted,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }

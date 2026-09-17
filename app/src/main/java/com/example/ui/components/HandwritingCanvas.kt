@@ -10,6 +10,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -29,8 +30,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -75,6 +78,10 @@ fun HandwritingCanvas(
     // Zoom and Pan state
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+
+    // Magnifier Loupe state
+    var isLoupeActive by remember { mutableStateOf(false) }
+    var loupeOffset by remember { mutableStateOf(Offset(220f, 180f)) }
 
     val transformState = rememberTransformableState { zoomChange, offsetChange, _ ->
         scale = (scale * zoomChange).coerceIn(0.85f, 3.0f)
@@ -421,6 +428,107 @@ fun HandwritingCanvas(
                             contentDescription = "Đặt lại tỉ lệ",
                             tint = Color(0xFF64748B),
                             modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Magnifier Loupe Toggle Button
+                    IconButton(
+                        onClick = { isLoupeActive = !isLoupeActive },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = if (isLoupeActive) "Tắt kính lúp" else "Bật kính lúp soi nét chữ",
+                            tint = if (isLoupeActive) Color(0xFF059669) else Color(0xFF64748B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            // Interactive Magnifier Loupe Lens Layer (x2.2 Magnification)
+            if (isLoupeActive) {
+                Box(
+                    modifier = Modifier
+                        .offset { androidx.compose.ui.unit.IntOffset(loupeOffset.x.toInt() - 62, loupeOffset.y.toInt() - 62) }
+                        .size(124.dp)
+                        .shadow(12.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFFFDF8))
+                        .border(3.5.dp, Color(0xFF059669), CircleShape)
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                loupeOffset += dragAmount
+                            }
+                        }
+                        .testTag("magnifier_loupe")
+                ) {
+                    // Magnified canvas content with 2.2x scale centered at loupe position
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer(
+                                scaleX = 2.2f,
+                                scaleY = 2.2f,
+                                translationX = -(loupeOffset.x * 1.2f),
+                                translationY = -(loupeOffset.y * 1.2f)
+                            )
+                    ) {
+                        val w = size.width * 2f
+                        val h = size.height * 2f
+                        val step = 26.dp.toPx()
+                        var x = step
+                        while (x < w) {
+                            drawLine(Color(0x300284C7), Offset(x, 0f), Offset(x, h), strokeWidth = 1f)
+                            x += step
+                        }
+                        var y = step
+                        while (y < h) {
+                            drawLine(Color(0x300284C7), Offset(0f, y), Offset(w, y), strokeWidth = 1f)
+                            y += step
+                        }
+                    }
+
+                    // Centered Loupe Crosshair Reticle
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        drawLine(Color(0x88DC2626), Offset(cx - 14f, cy), Offset(cx + 14f, cy), strokeWidth = 1.5f)
+                        drawLine(Color(0x88DC2626), Offset(cx, cy - 14f), Offset(cx, cy + 14f), strokeWidth = 1.5f)
+                        drawCircle(Color(0x33DC2626), radius = 10f, center = Offset(cx, cy))
+                    }
+
+                    // Floating text label on Loupe
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xDD064E3B),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 6.dp)
+                    ) {
+                        Text(
+                            text = "Kính lúp x2.2",
+                            color = Color(0xFFA7F3D0),
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    // Close loupe button
+                    IconButton(
+                        onClick = { isLoupeActive = false },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(26.dp)
+                            .padding(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Tắt kính lúp",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }
