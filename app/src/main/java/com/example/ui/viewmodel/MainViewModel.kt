@@ -55,11 +55,75 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
+    // Phase 5: Classes, Students & Cloud Sync State
+    private val _classList = MutableStateFlow<List<com.example.data.api.ClassItem>>(com.example.data.repository.GradeRepository.defaultClasses)
+    val classList: StateFlow<List<com.example.data.api.ClassItem>> = _classList.asStateFlow()
+
+    private val _studentList = MutableStateFlow<List<com.example.data.api.StudentItem>>(com.example.data.repository.GradeRepository.defaultStudents)
+    val studentList: StateFlow<List<com.example.data.api.StudentItem>> = _studentList.asStateFlow()
+
+    private val _selectedClass = MutableStateFlow("Lớp 3A")
+    val selectedClass: StateFlow<String> = _selectedClass.asStateFlow()
+
+    private val _selectedStudent = MutableStateFlow("Nguyễn Văn An")
+    val selectedStudent: StateFlow<String> = _selectedStudent.asStateFlow()
+
+    private val _syncStatus = MutableStateFlow<Pair<Boolean?, String>>(Pair(null, "Chưa đồng bộ"))
+    val syncStatus: StateFlow<Pair<Boolean?, String>> = _syncStatus.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
     init {
         // Pre-populate sample in database if history is empty
         viewModelScope.launch {
             repository.saveRecord(SampleEssays.sample2Good)
             repository.saveRecord(SampleEssays.sample1Eureka)
+            fetchClassesAndStudents()
+        }
+    }
+
+    fun setSelectedClass(cls: String) {
+        _selectedClass.value = cls
+        val inClass = _studentList.value.filter { it.className == cls }
+        if (inClass.isNotEmpty()) {
+            _selectedStudent.value = inClass[0].name
+        }
+    }
+
+    fun setSelectedStudent(student: String) {
+        _selectedStudent.value = student
+    }
+
+    fun fetchClassesAndStudents() {
+        viewModelScope.launch {
+            try {
+                val classes = repository.getClassesList(_serverUrl.value)
+                if (classes.isNotEmpty()) _classList.value = classes
+                val students = repository.getStudentsList(_serverUrl.value)
+                if (students.isNotEmpty()) _studentList.value = students
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun syncAllGradesToServer() {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            _syncStatus.value = Pair(null, "Đang đồng bộ sổ điểm lên máy chủ...")
+            try {
+                val (success, fail) = repository.syncAllGradesToServer(_serverUrl.value)
+                _isSyncing.value = false
+                if (fail == 0 && success > 0) {
+                    _syncStatus.value = Pair(true, "Đã đồng bộ thành công $success bài chấm về trường!")
+                } else if (success > 0) {
+                    _syncStatus.value = Pair(true, "Đã gửi $success bài, lỗi $fail bài.")
+                } else {
+                    _syncStatus.value = Pair(false, "Không có bài cần gửi hoặc kết nối máy chủ gián đoạn.")
+                }
+            } catch (e: Exception) {
+                _isSyncing.value = false
+                _syncStatus.value = Pair(false, "Lỗi đồng bộ: ${e.localizedMessage}")
+            }
         }
     }
 
@@ -71,7 +135,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _isDarkTheme.value = dark
     }
 
-    fun gradeBitmap(bitmap: Bitmap, studentGrade: Int = 3) {
+    fun gradeBitmap(
+        bitmap: Bitmap,
+        studentGrade: Int = 3,
+        studentName: String = _selectedStudent.value,
+        className: String = _selectedClass.value
+    ) {
         viewModelScope.launch {
             _gradingState.value = GradingUiState.Processing("1/4. Tiền xử lý ảnh: Khử bóng, cân bằng trắng CLAHE...", 0.25f)
             delay(150)
@@ -85,7 +154,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val result = repository.gradeImage(
                     bitmap = bitmap,
                     serverUrl = _serverUrl.value,
-                    studentGrade = studentGrade
+                    studentGrade = studentGrade,
+                    studentName = studentName,
+                    className = className
                 )
                 _currentResult.value = result
                 _selectedErrorId.value = result.errors.firstOrNull()?.id

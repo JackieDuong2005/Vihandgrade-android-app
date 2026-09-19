@@ -111,6 +111,10 @@ fun ViHandGradeApp(
     val serverUrl by viewModel.serverUrl.collectAsStateWithLifecycle()
     val pingStatus by viewModel.pingStatus.collectAsStateWithLifecycle()
     val isPinging by viewModel.isPinging.collectAsStateWithLifecycle()
+    val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val classList by viewModel.classList.collectAsStateWithLifecycle()
+    val studentList by viewModel.studentList.collectAsStateWithLifecycle()
 
     // 5 Screen tabs matching the HTML Mockup: "home" (default), "grade", "camera", "dictation", "settings"
     var activeTab by remember { mutableStateOf("home") }
@@ -254,6 +258,16 @@ fun ViHandGradeApp(
                                 viewModel.gradeBitmap(bitmap)
                                 activeTab = "grade"
                             },
+                            onCaptureWithDetails = { bitmap, cls, std, _ ->
+                                viewModel.gradeBitmap(
+                                    bitmap = bitmap,
+                                    studentName = std,
+                                    className = cls
+                                )
+                                activeTab = "grade"
+                            },
+                            classList = classList.map { it.name },
+                            studentList = studentList,
                             onClose = { activeTab = "home" }
                         )
                     }
@@ -272,15 +286,20 @@ fun ViHandGradeApp(
                         )
                     }
                     "dictation" -> {
-                        DictationScreen()
+                        DictationScreen(serverUrl = serverUrl)
                     }
                     "settings" -> {
                         ServerSettingsScreen(
                             serverUrl = serverUrl,
                             pingStatus = pingStatus,
                             isPinging = isPinging,
+                            syncStatus = syncStatus,
+                            isSyncing = isSyncing,
+                            localRecordsCount = historyList.size,
                             onSaveUrl = { newUrl -> viewModel.updateServerUrl(newUrl) },
                             onPing = { viewModel.testConnection() },
+                            onSyncGrades = { viewModel.syncAllGradesToServer() },
+                            onRefreshClassesAndStudents = { viewModel.fetchClassesAndStudents() },
                             isDarkTheme = isDarkTheme,
                             onToggleTheme = onToggleTheme
                         )

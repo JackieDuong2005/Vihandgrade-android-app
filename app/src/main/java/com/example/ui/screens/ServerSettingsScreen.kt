@@ -48,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -60,13 +61,22 @@ import com.example.ui.components.NotebookBackground
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.EmeraldPrimary
 
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Sync
+
 @Composable
 fun ServerSettingsScreen(
     serverUrl: String,
     pingStatus: Pair<Boolean?, String>,
     isPinging: Boolean,
+    syncStatus: Pair<Boolean?, String> = Pair(null, "Chưa đồng bộ"),
+    isSyncing: Boolean = false,
+    localRecordsCount: Int = 0,
     onSaveUrl: (String) -> Unit,
     onPing: () -> Unit,
+    onSyncGrades: () -> Unit = {},
+    onRefreshClassesAndStudents: () -> Unit = {},
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -294,6 +304,120 @@ fun ServerSettingsScreen(
                             color = AppTheme.colors.textPrimary,
                             fontSize = 11.sp
                         )
+                    }
+                }
+            }
+        }
+
+        // Group: Đồng bộ sổ điểm về trường (Cloud / Pi Sync - Phase 5)
+        SettingsGroup(
+            title = "Đồng Bộ Sổ Điểm Về Trường",
+            icon = Icons.Default.CloudUpload
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Đẩy các bài chấm offline lưu trên điện thoại lên cơ sở dữ liệu vihand.db của trường.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTheme.colors.textMuted
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Số bài chấm nội bộ:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppTheme.colors.textPrimary
+                    )
+                    Text(
+                        text = "$localRecordsCount bài sẵn sàng",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = primaryBrand,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Trạng thái đồng bộ
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = AppTheme.colors.cardElevated,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when (syncStatus.first) {
+                                        true -> primaryBrand
+                                        false -> Color(0xFFEF4444)
+                                        else -> Color(0xFFF59E0B)
+                                    }
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = syncStatus.second,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTheme.colors.textPrimary
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Nút bắt đầu đồng bộ
+                    Button(
+                        onClick = onSyncGrades,
+                        enabled = !isSyncing && localRecordsCount > 0,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = primaryBrand),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = if (isDarkTheme) Color(0xFF064E3B) else Color.White
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Đang đồng bộ...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Đồng bộ ngay", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Nút cập nhật danh sách lớp / học sinh
+                    Button(
+                        onClick = onRefreshClassesAndStudents,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppTheme.colors.cardElevated),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            tint = primaryBrand,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Cập nhật lớp", color = AppTheme.colors.textPrimary, fontSize = 12.sp)
                     }
                 }
             }

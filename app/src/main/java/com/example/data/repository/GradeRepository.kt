@@ -3,8 +3,11 @@ package com.example.data.repository
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Base64
+import com.example.data.api.ClassItem
 import com.example.data.api.GradeApiRequest
 import com.example.data.api.NetworkClient
+import com.example.data.api.ServerGradeSyncRequest
+import com.example.data.api.StudentItem
 import com.example.data.local.AppDatabase
 import com.example.data.local.GradeRecordDao
 import com.example.data.local.GradeRecordEntity
@@ -37,10 +40,14 @@ class GradeRepository(
         bitmap: Bitmap,
         serverUrl: String = NetworkClient.DEFAULT_BASE_URL,
         studentGrade: Int = 3,
-        essayType: String = "spelling"
+        essayType: String = "spelling",
+        gradingMode: String = "dictation",
+        studentName: String = "Học sinh",
+        className: String = ""
     ): GradeResult = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
         val imageBase64 = encodeBitmapToBase64(bitmap)
+        val effectiveClassName = className.ifBlank { "Lớp ${studentGrade}A" }
 
         try {
             val apiService = NetworkClient.createService(serverUrl)
@@ -48,6 +55,9 @@ class GradeRepository(
                 GradeApiRequest(
                     imageBase64 = imageBase64,
                     studentGrade = studentGrade,
+                    gradingMode = gradingMode,
+                    studentName = studentName,
+                    className = effectiveClassName,
                     essayType = essayType
                 )
             )
@@ -79,22 +89,28 @@ class GradeRepository(
                         y1 = err.y1,
                         x2 = err.x2,
                         y2 = err.y2,
-                        lineNumber = err.lineNumber
+                        lineNumber = err.lineNumber,
+                        // Tọa độ tương đối từ YOLOv8 (0.0–1.0) cho Bounding Box trên ảnh thật
+                        rel_x1 = err.relX1 ?: err.x1,
+                        rel_y1 = err.relY1 ?: err.y1,
+                        rel_w = err.relW ?: (err.x2 - err.x1).coerceAtLeast(0.05f),
+                        rel_h = err.relH ?: (err.y2 - err.y1).coerceAtLeast(0.04f)
                     )
                 } ?: emptyList()
 
                 val result = GradeResult(
                     id = UUID.randomUUID().toString(),
                     timestamp = System.currentTimeMillis(),
-                    studentName = body.studentName ?: "Học sinh Tiểu học",
-                    className = "Lớp ${studentGrade}A",
+                    studentName = body.studentName ?: studentName,
+                    className = body.className ?: effectiveClassName,
                     essayTitle = body.essayTitle ?: "Bài thi Viết tay Tiểu học",
                     criteria = criteria,
                     pedagogicalComment = body.pedagogicalComment ?: "Bài làm có nhiều cố gắng, cần chú ý chính tả.",
+                    pedagogicalComments = body.pedagogicalComments ?: emptyList(),
                     extractedText = body.extractedText ?: "Văn bản bài thi chữ viết tay",
                     correctedFullText = body.correctedFullText ?: "",
                     errors = errors,
-                    processingTimeMs = System.currentTimeMillis() - startTime,
+                    processingTimeMs = body.processingTimeMs ?: (System.currentTimeMillis() - startTime),
                     serverSource = body.serverSource ?: "Raspberry Pi Server (Cloudflare Tunnel)"
                 )
                 saveRecord(result)
@@ -258,6 +274,98 @@ class GradeRepository(
             processingTimeMs = 1100L,
             serverSource = serverSource,
             sampleType = sampleType
+        )
+    }
+
+    suspend fun getClassesList(serverUrl: String): List<ClassItem> = withContext(Dispatchers.IO) {
+        try {
+            val api = NetworkClient.createService(serverUrl)
+            val res = api.getClasses()
+            if (res.isSuccessful && res.body()?.classes != null) {
+                res.body()!!.classes!!
+            } else {
+                defaultClasses
+            }
+        } catch (_: Exception) {
+            defaultClasses
+        }
+    }
+
+    suspend fun getStudentsList(serverUrl: String, className: String? = null): List<StudentItem> = withContext(Dispatchers.IO) {
+        try {
+            val api = NetworkClient.createService(serverUrl)
+            val res = api.getStudents()
+            if (res.isSuccessful && res.body()?.users != null) {
+                val users = res.body()!!.users!!
+                if (!className.isNullOrBlank()) {
+                    users.filter { it.className == className }
+                } else {
+                    users
+                }
+            } else {
+                defaultStudents.filter { className.isNullOrBlank() || it.className == className }
+            }
+        } catch (_: Exception) {
+            defaultStudents.filter { className.isNullOrBlank() || it.className == className }
+        }
+    }
+
+    suspend fun syncAllGradesToServer(serverUrl: String): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        val records = dao.getAllRecordsList()
+        var successCount = 0
+        var failCount = 0
+        val api = NetworkClient.createService(serverUrl)
+
+        records.forEach { rec ->
+            try {
+                val scoreStr = "${String.format(java.util.Locale.US, "%.1f", rec.totalScore)}/10"
+                val breakdownJson = "{\"spelling\":${rec.spellingScore},\"format\":${rec.formatScore},\"content\":${rec.contentScore},\"creativity\":${rec.creativityScore}}"
+                val req = ServerGradeSyncRequest(
+                    gradingMode = "dictation",
+                    studentName = rec.studentName,
+                    assignmentTitle = rec.essayTitle,
+                    className = rec.className,
+                    originalText = rec.extractedText.ifBlank { rec.correctedFullText },
+                    fixedText = rec.correctedFullText,
+                    score = scoreStr,
+                    scoreBreakdown = breakdownJson,
+                    corrections = rec.errorsJson,
+                    pedagogicalComment = rec.pedagogicalComment,
+                    feedback = rec.pedagogicalComment
+                )
+                val response = api.syncGrade(req)
+                if (response.isSuccessful) {
+                    successCount++
+                } else {
+                    failCount++
+                }
+            } catch (_: Exception) {
+                failCount++
+            }
+        }
+        Pair(successCount, failCount)
+    }
+
+    companion object {
+        val defaultClasses = listOf(
+            ClassItem("c_3a", "Lớp 3A", 3, 35, "Cô Nguyễn Thị Mai"),
+            ClassItem("c_3b", "Lớp 3B", 3, 34, "Thầy Trần Văn Hùng"),
+            ClassItem("c_4a", "Lớp 4A", 4, 36, "Cô Lê Thị Hoa"),
+            ClassItem("c_4b", "Lớp 4B", 4, 35, "Thầy Phạm Văn Nam"),
+            ClassItem("c_5a", "Lớp 5A", 5, 38, "Cô Hoàng Lan Anh")
+        )
+
+        val defaultStudents = listOf(
+            StudentItem("s_1", "Nguyễn Văn An", "an.nv", "Lớp 3A"),
+            StudentItem("s_2", "Trần Thị Bình", "binh.tt", "Lớp 3A"),
+            StudentItem("s_3", "Lê Hoàng Châu", "chau.lh", "Lớp 3A"),
+            StudentItem("s_4", "Phạm Minh Đức", "duc.pm", "Lớp 3A"),
+            StudentItem("s_5", "Vũ Hải Đăng", "dang.vh", "Lớp 3A"),
+            StudentItem("s_6", "Hoàng Kim Ngân", "ngan.hk", "Lớp 3B"),
+            StudentItem("s_7", "Bùi Quốc Khánh", "khanh.bq", "Lớp 3B"),
+            StudentItem("s_8", "Đỗ Mai Phương", "phuong.dm", "Lớp 3B"),
+            StudentItem("s_9", "Lê Tuấn Kiệt", "kiet.lt", "Lớp 4A"),
+            StudentItem("s_10", "Ngô Quỳnh Chi", "chi.nq", "Lớp 4A")
         )
     }
 }

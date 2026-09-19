@@ -93,6 +93,13 @@ fun HomeScreen(
         label = "dotAlpha"
     )
 
+    // Dynamic metrics calculated from Room history records (falls back to sample defaults if history is empty)
+    val totalGradedDisplay = if (historyList.isNotEmpty()) historyList.size.toString() else "128"
+    val studentsCountDisplay = if (historyList.isNotEmpty()) historyList.map { it.studentName }.distinct().size.toString() else "42"
+    val avgScoreDisplay = if (historyList.isNotEmpty()) {
+        String.format(java.util.Locale.US, "%.1f", historyList.map { it.criteria.totalScore }.average())
+    } else "8.4"
+
     NotebookBackground(modifier = modifier) {
         LazyColumn(
             modifier = Modifier
@@ -239,7 +246,7 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = "128",
+                                    text = totalGradedDisplay,
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.Black,
                                     color = AppTheme.colors.textPrimary
@@ -284,7 +291,7 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = "42",
+                                    text = studentsCountDisplay,
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.Black,
                                     color = AppTheme.colors.textPrimary
@@ -301,7 +308,7 @@ fun HomeScreen(
                     }
                 }
 
-                // Row 2: Điểm trung bình (8.4 /10) & Loại bài tập (6 dạng)
+                // Row 2: Điểm trung bình & Loại bài tập (6 dạng)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -335,7 +342,7 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = "8.4",
+                                    text = avgScoreDisplay,
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.Black,
                                     color = AppTheme.colors.textPrimary

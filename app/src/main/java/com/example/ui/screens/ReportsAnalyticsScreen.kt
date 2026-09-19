@@ -53,6 +53,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,28 +76,21 @@ import com.example.ui.components.NotebookBackground
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.EmeraldLight
 import com.example.ui.theme.EmeraldPrimary
+import com.example.ui.viewmodel.ErrorCategoryData
+import com.example.ui.viewmodel.ReportsViewModel
+import com.example.ui.viewmodel.UnderperformingStudentData
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-data class ErrorCategoryStat(
-    val categoryName: String,
-    val count: Int,
-    val percentage: Float,
-    val barColor: Color,
-    val examples: String
-)
-
-data class UnderperformingStudent(
-    val id: String,
-    val name: String,
-    val className: String,
-    val averageScore: Float,
-    val primaryMistake: String,
-    val recommendedAction: String
+// Color palette for error category bars
+private val ERROR_BAR_COLORS = listOf(
+    Color(0xFFEF4444), Color(0xFFF59E0B), Color(0xFF3B82F6),
+    Color(0xFF10B981), Color(0xFF8B5CF6)
 )
 
 @Composable
 fun ReportsAnalyticsScreen(
+    viewModel: ReportsViewModel = androidx.lifecycle.viewmodel.compose.viewModel(),
     modifier: Modifier = Modifier,
     onNavigateToGrading: () -> Unit = {},
     onBack: () -> Unit = {}
@@ -105,71 +100,31 @@ fun ReportsAnalyticsScreen(
     val cardBackground = AppTheme.colors.card
     val borderColor = AppTheme.colors.border
 
-    var selectedClass by remember { mutableStateOf("Tất cả lớp") }
-    var selectedTimeframe by remember { mutableStateOf("Tuần này") }
+    // Collect ViewModel state
+    val selectedClass by viewModel.selectedClass.collectAsState()
+    val selectedTimeframe by viewModel.selectedTimeframe.collectAsState()
+    val classList by viewModel.classList.collectAsState()
+    val stats by viewModel.stats.collectAsState()
+    val exportResult by viewModel.exportResult.collectAsState()
+
     var showExportSuccessMessage by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
-    val classList = listOf("Tất cả lớp", "Lớp 3A1", "Lớp 3A2", "Lớp 4B", "Lớp 5A")
-    val timeframeList = listOf("Tuần này", "Tháng này", "Học kỳ 1", "Cả năm")
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val timeframeList = viewModel.timeframeList
+    val errorStats = stats.errorCategories
+    val focusStudents = stats.underperformingStudents
 
-    val errorStats = listOf(
-        ErrorCategoryStat(
-            categoryName = "Phụ âm đầu (s/x, ch/tr, d/gi/r, l/n)",
-            count = 32,
-            percentage = 0.45f,
-            barColor = Color(0xFFEF4444),
-            examples = "chổ hoa -> trổ hoa, xớm mai -> sớm mai"
-        ),
-        ErrorCategoryStat(
-            categoryName = "Vần khó (an/ang, uôn/uông, iên/iêng)",
-            count = 18,
-            percentage = 0.25f,
-            barColor = Color(0xFFF59E0B),
-            examples = "bàng tay -> bàn tay, muông loài -> muôn loài"
-        ),
-        ErrorCategoryStat(
-            categoryName = "Dấu thanh điệu (Hỏi / Ngã)",
-            count = 14,
-            percentage = 0.20f,
-            barColor = Color(0xFF3B82F6),
-            examples = "giửa trời -> giữa trời, ngở ngàng -> ngỡ ngàng"
-        ),
-        ErrorCategoryStat(
-            categoryName = "Viết hoa đầu dòng & quy chuẩn vở ô ly",
-            count = 7,
-            percentage = 0.10f,
-            barColor = Color(0xFF10B981),
-            examples = "chữ cái đầu dòng thơ, tên riêng địa danh"
-        )
-    )
-
-    val focusStudents = listOf(
-        UnderperformingStudent(
-            id = "s_1",
-            name = "Lê Hoàng Khôi",
-            className = "Lớp 3A1",
-            averageScore = 6.2f,
-            primaryMistake = "Phụ âm đầu s/x, d/gi",
-            recommendedAction = "Giao phiếu bài tập phân biệt s/x vào thứ 5"
-        ),
-        UnderperformingStudent(
-            id = "s_2",
-            name = "Phạm Bảo Nam",
-            className = "Lớp 3A2",
-            averageScore = 6.5f,
-            primaryMistake = "Dấu thanh hỏi / ngã",
-            recommendedAction = "Rèn phát âm từ có dấu ngã trong giờ tự học"
-        ),
-        UnderperformingStudent(
-            id = "s_3",
-            name = "Ngô Mai Phương",
-            className = "Lớp 4B",
-            averageScore = 6.4f,
-            primaryMistake = "Vần có âm cuối n/ng",
-            recommendedAction = "Đọc to đoạn văn trước khi bắt đầu viết"
-        )
-    )
+    // React to export result
+    LaunchedEffect(exportResult) {
+        exportResult?.let { res ->
+            showExportSuccessMessage = true
+            android.widget.Toast.makeText(context, res.message, android.widget.Toast.LENGTH_SHORT).show()
+            delay(4000)
+            showExportSuccessMessage = false
+            viewModel.clearExportResult()
+        }
+    }
 
     NotebookBackground(modifier = modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -242,13 +197,7 @@ fun ReportsAnalyticsScreen(
 
                     // Export button
                     Button(
-                        onClick = {
-                            coroutineScope.launch {
-                                showExportSuccessMessage = true
-                                delay(3000)
-                                showExportSuccessMessage = false
-                            }
-                        },
+                        onClick = { viewModel.exportCsv() },
                         colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
@@ -281,7 +230,7 @@ fun ReportsAnalyticsScreen(
                                     if (isSelected) primaryColor else borderColor
                                 ),
                                 modifier = Modifier
-                                    .clickable { selectedClass = item }
+                                    .clickable { viewModel.setSelectedClass(item) }
                                     .testTag("filter_class_$item")
                             ) {
                                 Text(
@@ -312,7 +261,7 @@ fun ReportsAnalyticsScreen(
                                         if (isSelected) primaryColor else borderColor.copy(alpha = 0.5f),
                                         RoundedCornerShape(8.dp)
                                     )
-                                    .clickable { selectedTimeframe = tf }
+                                    .clickable { viewModel.setSelectedTimeframe(tf) }
                                     .padding(vertical = 6.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -351,10 +300,10 @@ fun ReportsAnalyticsScreen(
                             // Metric 1: Average Score
                             MetricBox(
                                 title = "Điểm trung bình",
-                                value = "8.2",
+                                value = if (stats.totalGraded > 0) String.format("%.1f", stats.averageScore) else "--",
                                 unit = "/10",
-                                subtext = "+0.4 so với tuần trước",
-                                isPositive = true,
+                                subtext = if (stats.totalGraded > 0) "Từ ${stats.totalGraded} bài" else "Chưa có dữ liệu",
+                                isPositive = stats.averageScore >= 7.0f,
                                 modifier = Modifier.weight(1f)
                             )
 
@@ -363,9 +312,9 @@ fun ReportsAnalyticsScreen(
                             // Metric 2: Graded Count
                             MetricBox(
                                 title = "Đã chấm",
-                                value = "48",
+                                value = stats.totalGraded.toString(),
                                 unit = " bài",
-                                subtext = "100% sĩ số lớp",
+                                subtext = if (stats.totalGraded > 0) "$selectedClass" else "Chưa có bài nào",
                                 isPositive = true,
                                 modifier = Modifier.weight(1f)
                             )
@@ -375,10 +324,10 @@ fun ReportsAnalyticsScreen(
                             // Metric 3: Excellence rate
                             MetricBox(
                                 title = "Đạt Xuất sắc & Tốt",
-                                value = "77%",
+                                value = if (stats.totalGraded > 0) "${stats.excellentGoodPct}%" else "--%",
                                 unit = "",
-                                subtext = "37 / 48 học sinh",
-                                isPositive = true,
+                                subtext = if (stats.totalGraded > 0) "${stats.excellentCount + stats.goodCount} / ${stats.totalGraded} bài" else "Chưa có dữ liệu",
+                                isPositive = stats.excellentGoodPct >= 70,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -394,16 +343,23 @@ fun ReportsAnalyticsScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
 
+                        val total = stats.totalGraded.coerceAtLeast(1)
+                        val excPct = stats.excellentCount.toFloat() / total
+                        val goodPct = stats.goodCount.toFloat() / total
+                        val fairPct = stats.fairCount.toFloat() / total
+                        val needPct = stats.needsImprovementCount.toFloat() / total
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(12.dp)
                                 .clip(RoundedCornerShape(6.dp))
                         ) {
-                            Box(modifier = Modifier.weight(0.42f).background(Color(0xFF059669)))
-                            Box(modifier = Modifier.weight(0.35f).background(Color(0xFF3B82F6)))
-                            Box(modifier = Modifier.weight(0.18f).background(Color(0xFFF59E0B)))
-                            Box(modifier = Modifier.weight(0.05f).background(Color(0xFFEF4444)))
+                            if (excPct > 0) Box(modifier = Modifier.weight(excPct.coerceAtLeast(0.01f)).background(Color(0xFF059669)))
+                            if (goodPct > 0) Box(modifier = Modifier.weight(goodPct.coerceAtLeast(0.01f)).background(Color(0xFF3B82F6)))
+                            if (fairPct > 0) Box(modifier = Modifier.weight(fairPct.coerceAtLeast(0.01f)).background(Color(0xFFF59E0B)))
+                            if (needPct > 0) Box(modifier = Modifier.weight(needPct.coerceAtLeast(0.01f)).background(Color(0xFFEF4444)))
+                            if (stats.totalGraded == 0) Box(modifier = Modifier.weight(1f).background(AppTheme.colors.border.copy(alpha = 0.3f)))
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -413,10 +369,10 @@ fun ReportsAnalyticsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            LegendItem(color = Color(0xFF059669), label = "Xuất sắc: 42%")
-                            LegendItem(color = Color(0xFF3B82F6), label = "Tốt: 35%")
-                            LegendItem(color = Color(0xFFF59E0B), label = "Khá: 18%")
-                            LegendItem(color = Color(0xFFEF4444), label = "Cần rèn: 5%")
+                            LegendItem(color = Color(0xFF059669), label = "Xuất sắc: ${(excPct * 100).toInt()}%")
+                            LegendItem(color = Color(0xFF3B82F6), label = "Tốt: ${(goodPct * 100).toInt()}%")
+                            LegendItem(color = Color(0xFFF59E0B), label = "Khá: ${(fairPct * 100).toInt()}%")
+                            LegendItem(color = Color(0xFFEF4444), label = "Cần rèn: ${(needPct * 100).toInt()}%")
                         }
                     }
                 }
@@ -446,7 +402,7 @@ fun ReportsAnalyticsScreen(
                             )
                         }
                         Text(
-                            text = "Tổng hợp 71 lỗi được phát hiện qua camera AI",
+                            text = if (stats.totalErrors > 0) "Tổng hợp ${stats.totalErrors} lỗi được phát hiện qua camera AI" else "Chưa có dữ liệu lỗi",
                             style = MaterialTheme.typography.bodySmall,
                             color = AppTheme.colors.textMuted
                         )
@@ -454,9 +410,23 @@ fun ReportsAnalyticsScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         // Error bars
-                        errorStats.forEach { stat ->
-                            ErrorStatRow(stat = stat)
-                            Spacer(modifier = Modifier.height(10.dp))
+                        if (errorStats.isEmpty()) {
+                            Text(
+                                text = "Chấm thêm bài để xem phân tích lỗi thống kê",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTheme.colors.textMuted,
+                                modifier = Modifier.padding(vertical = 16.dp)
+                            )
+                        } else {
+                            errorStats.forEachIndexed { idx, stat ->
+                                ErrorStatRow(
+                                    categoryName = stat.categoryName,
+                                    count = stat.count,
+                                    percentage = stat.percentage,
+                                    barColor = ERROR_BAR_COLORS.getOrElse(idx) { Color.Gray }
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                            }
                         }
                     }
                 }
@@ -496,7 +466,7 @@ fun ReportsAnalyticsScreen(
                                 color = Color(0xFFEF4444).copy(alpha = 0.12f)
                             ) {
                                 Text(
-                                    text = "${focusStudents.size} em",
+                                    text = if (focusStudents.isNotEmpty()) "${focusStudents.size} em" else "0 em",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFDC2626),
@@ -513,9 +483,19 @@ fun ReportsAnalyticsScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        focusStudents.forEach { student ->
-                            StudentFocusItem(student = student)
-                            Spacer(modifier = Modifier.height(8.dp))
+                        if (focusStudents.isEmpty()) {
+                            Text(
+                                text = "Tuyệt vời! Không có em nào có điểm dưới 6.5 🎉",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF10B981),
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(vertical = 16.dp)
+                            )
+                        } else {
+                            focusStudents.forEach { student ->
+                                StudentFocusItem(student = student)
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
                         }
                     }
                 }
@@ -558,7 +538,7 @@ fun ReportsAnalyticsScreen(
                                 fontSize = 14.sp
                             )
                             Text(
-                                text = "File: BangDiem_ChinhTa_${selectedClass.replace(" ", "_")}.csv đã lưu vào Thư mục Tải về.",
+                                text = exportResult?.message ?: "File CSV đã lưu vào Thư mục Tải về.",
                                 color = EmeraldLight,
                                 fontSize = 12.sp
                             )
@@ -638,7 +618,12 @@ private fun LegendItem(color: Color, label: String) {
 }
 
 @Composable
-private fun ErrorStatRow(stat: ErrorCategoryStat) {
+private fun ErrorStatRow(
+    categoryName: String,
+    count: Int,
+    percentage: Float,
+    barColor: Color
+) {
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -646,42 +631,36 @@ private fun ErrorStatRow(stat: ErrorCategoryStat) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = stat.categoryName,
+                text = categoryName,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = AppTheme.colors.textPrimary
+                color = AppTheme.colors.textPrimary,
+                modifier = Modifier.weight(1f)
             )
             Text(
-                text = "${stat.count} lỗi (${(stat.percentage * 100).toInt()}%)",
+                text = "${count} lỗi (${(percentage * 100).toInt()}%)",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = stat.barColor
+                color = barColor
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
 
         // Progress line
         LinearProgressIndicator(
-            progress = { stat.percentage },
+            progress = { percentage },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp)),
-            color = stat.barColor,
-            trackColor = stat.barColor.copy(alpha = 0.15f)
-        )
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(
-            text = "Ví dụ sai: ${stat.examples}",
-            fontSize = 11.sp,
-            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-            color = AppTheme.colors.textMuted
+            color = barColor,
+            trackColor = barColor.copy(alpha = 0.15f)
         )
     }
 }
 
 @Composable
-private fun StudentFocusItem(student: UnderperformingStudent) {
+private fun StudentFocusItem(student: UnderperformingStudentData) {
     val isDark = AppTheme.colors.isDark
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -701,7 +680,7 @@ private fun StudentFocusItem(student: UnderperformingStudent) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = student.averageScore.toString(),
+                    text = String.format("%.1f", student.averageScore),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFDC2626)
@@ -727,15 +706,10 @@ private fun StudentFocusItem(student: UnderperformingStudent) {
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Lỗi chính: ${student.primaryMistake}",
+                    text = "Điểm TB: ${String.format("%.1f", student.averageScore)} / 10",
                     fontSize = 12.sp,
                     color = Color(0xFFD97706),
                     fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "Kế hoạch: ${student.recommendedAction}",
-                    fontSize = 11.sp,
-                    color = AppTheme.colors.textMuted
                 )
             }
         }

@@ -19,6 +19,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -179,6 +181,9 @@ private val samplePapers = listOf(
 fun CameraScanScreen(
     onCapture: (Bitmap) -> Unit,
     onClose: () -> Unit,
+    onCaptureWithDetails: ((Bitmap, String, String, String) -> Unit)? = null,
+    classList: List<String> = emptyList(),
+    studentList: List<com.example.data.api.StudentItem> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -283,16 +288,33 @@ fun CameraScanScreen(
     var selectedSampleIndex by remember { mutableIntStateOf(0) }
     val currentPaper = samplePapers[selectedSampleIndex % samplePapers.size]
 
-    // Quick Student Bar & Grading Mode states
-    var selectedClass by remember { mutableStateOf("Lớp 3A1") }
-    var selectedStudent by remember { mutableStateOf("Nguyễn Bảo Nam") }
+    // Quick Student Bar & Grading Mode states (Phase 5 Dynamic Sync)
+    val classOptions = remember(classList) {
+        if (classList.isNotEmpty()) classList else listOf("Lớp 3A", "Lớp 3B", "Lớp 4A", "Lớp 5A")
+    }
+    var selectedClass by remember(classOptions) { mutableStateOf(classOptions.firstOrNull() ?: "Lớp 3A") }
+
+    val studentOptions = remember(studentList, selectedClass) {
+        val filtered = studentList.filter { it.className == selectedClass }.map { it.name }
+        if (filtered.isNotEmpty()) filtered
+        else if (studentList.isNotEmpty()) studentList.map { it.name }
+        else listOf("Nguyễn Văn An", "Trần Thị Bình", "Lê Hoàng Châu", "Phạm Minh Đức", "Vũ Hải Đăng")
+    }
+    var selectedStudent by remember(studentOptions) { mutableStateOf(studentOptions.firstOrNull() ?: "Nguyễn Văn An") }
     var isAnonymousMode by remember { mutableStateOf(false) }
     var selectedGradingMode by remember { mutableStateOf("dictation") } // "dictation" (7-3) or "essay" (4-3-2-1)
     var showClassDropdown by remember { mutableStateOf(false) }
     var showStudentDropdown by remember { mutableStateOf(false) }
 
-    val classOptions = listOf("Lớp 3A1", "Lớp 3A2", "Lớp 4B", "Lớp 5A")
-    val studentOptions = listOf("Nguyễn Bảo Nam", "Trần Mai Chi", "Lê Hoàng Khôi", "Nguyễn Văn An", "Phạm Thu Hà")
+    fun dispatchCapture(bitmap: Bitmap) {
+        val stdName = if (isAnonymousMode) "Thí sinh ẩn danh" else selectedStudent
+        val clsName = if (isAnonymousMode) "Khối ${selectedClass.filter { it.isDigit() }.ifEmpty { "3" }}" else selectedClass
+        if (onCaptureWithDetails != null) {
+            onCaptureWithDetails(bitmap, clsName, stdName, selectedGradingMode)
+        } else {
+            onCapture(bitmap)
+        }
+    }
 
     // Visual camera shutter flash feedback
     var isFlashing by remember { mutableStateOf(false) }
@@ -316,7 +338,7 @@ fun CameraScanScreen(
                 val stream = context.contentResolver.openInputStream(uri)
                 val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
                 if (bitmap != null) {
-                    onCapture(bitmap)
+                    dispatchCapture(bitmap)
                 }
             } catch (_: Exception) {
             }
@@ -800,24 +822,24 @@ fun CameraScanScreen(
                                                 override fun onCaptureSuccess(imageProxy: ImageProxy) {
                                                     val bitmap = imageProxy.toBitmap()
                                                     imageProxy.close()
-                                                    onCapture(bitmap)
+                                                    dispatchCapture(bitmap)
                                                 }
 
                                                 override fun onError(exception: ImageCaptureException) {
                                                     // Fallback to sample paper bitmap on error
                                                     val fallbackBitmap = getOrGenerateBitmap(selectedSampleIndex)
-                                                    onCapture(fallbackBitmap)
+                                                    dispatchCapture(fallbackBitmap)
                                                 }
                                             }
                                         )
                                     } catch (_: Exception) {
                                         val fallbackBitmap = getOrGenerateBitmap(selectedSampleIndex)
-                                        onCapture(fallbackBitmap)
+                                        dispatchCapture(fallbackBitmap)
                                     }
                                 } else {
                                     // Instant capture bitmap from sample paper
                                     val bitmap = getOrGenerateBitmap(selectedSampleIndex)
-                                    onCapture(bitmap)
+                                    dispatchCapture(bitmap)
                                 }
                             }
                         }
@@ -964,7 +986,10 @@ fun CameraScanScreen(
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.testTag("cam_class_selector")
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .testTag("cam_class_selector")
                                 ) {
                                     classOptions.forEach { cls ->
                                         val isClsSelected = selectedClass == cls

@@ -8,6 +8,8 @@ data class GradeApiRequest(
     @Json(name = "imageBase64") val imageBase64: String,
     @Json(name = "studentGrade") val studentGrade: Int = 3,
     @Json(name = "gradingMode") val gradingMode: String = "dictation",
+    @Json(name = "studentName") val studentName: String = "Học sinh",
+    @Json(name = "className") val className: String = "",
     @Json(name = "studentId") val studentId: String? = null,
     @Json(name = "classId") val classId: String? = null,
     @Json(name = "hinh_thuc") val hinhThuc: Float = 3.0f,
@@ -59,3 +61,68 @@ data class GradeApiResponse(
     @Json(name = "processingTimeMs") val processingTimeMs: Long? = null,
     @Json(name = "serverSource") val serverSource: String? = null
 )
+
+// ============================================================
+// DICTATION / KHO NGỮ LIỆU SGK MODELS (Phase 4)
+// ============================================================
+@JsonClass(generateAdapter = true)
+data class DictationPassage(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "gradeLevel") val gradeLevel: Int = 3,
+    @Json(name = "bookSet") val bookSet: String = "KetNoi",
+    @Json(name = "unit") val unit: String = "",
+    @Json(name = "title") val title: String,
+    @Json(name = "content") val content: String,
+    @Json(name = "difficultWords") val difficultWords: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class DictationPassagesResponse(
+    @Json(name = "passages") val passages: List<DictationPassage>? = null
+)
+
+// ============================================================
+// CLASS & STUDENT SYNC MODELS (Phase 5)
+// ============================================================
+@JsonClass(generateAdapter = true)
+data class ClassItem(
+    @Json(name = "id") val id: String,
+    @Json(name = "name") val name: String,
+    @Json(name = "grade") val grade: Int? = null,
+    @Json(name = "studentCount") val studentCount: Int? = 0,
+    @Json(name = "teacherName") val teacherName: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class ClassesResponse(
+    @Json(name = "classes") val classes: List<ClassItem>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class StudentItem(
+    @Json(name = "id") val id: String,
+    @Json(name = "name") val name: String,
+    @Json(name = "username") val username: String? = null,
+    @Json(name = "className") val className: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class StudentsResponse(
+    @Json(name = "users") val users: List<StudentItem>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class ServerGradeSyncRequest(
+    @Json(name = "gradingMode") val gradingMode: String = "dictation",
+    @Json(name = "studentName") val studentName: String,
+    @Json(name = "assignmentTitle") val assignmentTitle: String,
+    @Json(name = "className") val className: String,
+    @Json(name = "originalText") val originalText: String,
+    @Json(name = "fixedText") val fixedText: String = "",
+    @Json(name = "score") val score: String, // e.g. "8.5/10"
+    @Json(name = "scoreBreakdown") val scoreBreakdown: String,
+    @Json(name = "corrections") val corrections: String = "[]",
+    @Json(name = "pedagogicalComment") val pedagogicalComment: String = "",
+    @Json(name = "feedback") val feedback: String = ""
+)
+
