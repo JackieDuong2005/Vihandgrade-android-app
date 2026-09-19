@@ -820,8 +820,15 @@ fun CameraScanScreen(
                                             cameraExecutor,
                                             object : ImageCapture.OnImageCapturedCallback() {
                                                 override fun onCaptureSuccess(imageProxy: ImageProxy) {
-                                                    val bitmap = imageProxy.toBitmap()
+                                                    val rotation = imageProxy.imageInfo.rotationDegrees
+                                                    val rawBitmap = imageProxy.toBitmap()
                                                     imageProxy.close()
+                                                    val bitmap = if (rotation != 0) {
+                                                        val matrix = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
+                                                        Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true)
+                                                    } else {
+                                                        rawBitmap
+                                                    }
                                                     dispatchCapture(bitmap)
                                                 }
 

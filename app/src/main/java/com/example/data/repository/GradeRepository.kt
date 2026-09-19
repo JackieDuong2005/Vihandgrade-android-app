@@ -48,6 +48,7 @@ class GradeRepository(
         val startTime = System.currentTimeMillis()
         val imageBase64 = encodeBitmapToBase64(bitmap)
         val effectiveClassName = className.ifBlank { "Lớp ${studentGrade}A" }
+        var errorReason: String? = null
 
         try {
             val apiService = NetworkClient.createService(serverUrl)
@@ -115,13 +116,17 @@ class GradeRepository(
                 )
                 saveRecord(result)
                 return@withContext result
+            } else {
+                errorReason = "Mã lỗi HTTP ${response.code()}"
+                android.util.Log.e("GradeRepository", "API HTTP Error: HTTP ${response.code()} from $serverUrl")
             }
-        } catch (_: Exception) {
-            // Fallback gracefully to Edge AI Simulation
+        } catch (e: Exception) {
+            errorReason = e.localizedMessage ?: e.javaClass.simpleName
+            android.util.Log.e("GradeRepository", "API Exception calling $serverUrl: $errorReason", e)
         }
 
         // Intelligent local Edge AI Pipeline simulation
-        val simulatedResult = generateSimulatedAnalysis(bitmap, startTime)
+        val simulatedResult = generateSimulatedAnalysis(bitmap, startTime, errorReason, serverUrl)
         saveRecord(simulatedResult)
         simulatedResult
     }
@@ -196,7 +201,16 @@ class GradeRepository(
         return Base64.encodeToString(byteArray, Base64.NO_WRAP)
     }
 
-    private fun generateSimulatedAnalysis(bitmap: Bitmap, startTime: Long): GradeResult {
+    private fun generateSimulatedAnalysis(
+        bitmap: Bitmap,
+        startTime: Long,
+        errorReason: String? = null,
+        serverUrl: String = ""
+    ): GradeResult {
+        val notice = if (!errorReason.isNullOrBlank()) {
+            "\n\n[⚠️ THÔNG BÁO KỸ THUẬT: Máy chủ AI tại $serverUrl không phản hồi ($errorReason). Ứng dụng tự động chuyển sang chế độ Mô Phỏng Ngoại Tuyến (Edge AI Offline). Hãy kiểm tra lại địa chỉ máy chủ trong tab 'Trạm Pi']."
+        } else ""
+
         // Generates realistic educational grading based on primary school rubrics
         return GradeResult(
             id = UUID.randomUUID().toString(),
@@ -211,7 +225,7 @@ class GradeRepository(
                 creativityScore = 0.7f,
                 totalScore = 7.5f
             ),
-            pedagogicalComment = "Bài viết trình bày sạch sẽ, đúng dòng kẻ ô ly. Phát hiện 2 lỗi dùng từ và phụ âm đầu. Em cần chú ý phân biệt 'tr' và 'ch', 's' và 'x' để bài viết hoàn thiện hơn!",
+            pedagogicalComment = "Bài viết trình bày sạch sẽ, đúng dòng kẻ ô ly. Phát hiện 2 lỗi dùng từ và phụ âm đầu. Em cần chú ý phân biệt 'tr' và 'ch', 's' và 'x' để bài viết hoàn thiện hơn!$notice",
             extractedText = "Buổi sáng sớm, đàn chim ríu rít chuyền cành. Ngoài vườn cây bàng chổ hoa thơm ngát. Gió thổi bay lượn xớm mai.",
             correctedFullText = "Buổi sáng sớm, đàn chim ríu rít chuyền cành. Ngoài vườn cây bàng trổ hoa thơm ngát. Gió thổi bay lượn sớm mai.",
             errors = listOf(
@@ -243,7 +257,11 @@ class GradeRepository(
                 )
             ),
             processingTimeMs = System.currentTimeMillis() - startTime,
-            serverSource = "Edge AI Local Engine (Dự phòng thông minh)"
+            serverSource = if (!errorReason.isNullOrBlank()) {
+                "Mô phỏng Ngoại Tuyến ($errorReason)"
+            } else {
+                "Edge AI Local Engine (Dự phòng thông minh)"
+            }
         )
     }
 
