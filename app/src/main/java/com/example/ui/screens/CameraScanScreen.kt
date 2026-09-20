@@ -15,12 +15,15 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -182,6 +185,7 @@ fun CameraScanScreen(
     onCapture: (Bitmap) -> Unit,
     onClose: () -> Unit,
     onCaptureWithDetails: ((Bitmap, String, String, String) -> Unit)? = null,
+    onBatchCapture: ((List<Bitmap>, String) -> Unit)? = null,
     classList: List<String> = emptyList(),
     studentList: List<com.example.data.api.StudentItem> = emptyList(),
     modifier: Modifier = Modifier
@@ -306,19 +310,28 @@ fun CameraScanScreen(
     var showClassDropdown by remember { mutableStateOf(false) }
     var showStudentDropdown by remember { mutableStateOf(false) }
 
-    fun dispatchCapture(bitmap: Bitmap) {
-        val stdName = if (isAnonymousMode) "Thí sinh ẩn danh" else selectedStudent
-        val clsName = if (isAnonymousMode) "Khối ${selectedClass.filter { it.isDigit() }.ifEmpty { "3" }}" else selectedClass
-        if (onCaptureWithDetails != null) {
-            onCaptureWithDetails(bitmap, clsName, stdName, selectedGradingMode)
-        } else {
-            onCapture(bitmap)
-        }
-    }
+    // Chế độ Quét liên tục cả lớp (Batch Mode)
+    var isBatchMode by remember { mutableStateOf(false) }
+    val batchBitmaps = remember { androidx.compose.runtime.mutableStateListOf<Bitmap>() }
 
     // Visual camera shutter flash feedback
     var isFlashing by remember { mutableStateOf(false) }
     var switchNotification by remember { mutableStateOf<String?>(null) }
+
+    fun dispatchCapture(bitmap: Bitmap) {
+        if (isBatchMode) {
+            batchBitmaps.add(bitmap)
+            switchNotification = "Đã lưu bài #${batchBitmaps.size} của cả lớp"
+        } else {
+            val stdName = if (isAnonymousMode) "Thí sinh ẩn danh" else selectedStudent
+            val clsName = if (isAnonymousMode) "Khối ${selectedClass.filter { it.isDigit() }.ifEmpty { "3" }}" else selectedClass
+            if (onCaptureWithDetails != null) {
+                onCaptureWithDetails(bitmap, clsName, stdName, selectedGradingMode)
+            } else {
+                onCapture(bitmap)
+            }
+        }
+    }
 
     // Bitmap cache to eliminate memory allocation and UI freeze on shutter press
     val cachedBitmaps = remember { mutableMapOf<Int, Bitmap>() }
@@ -716,6 +729,123 @@ fun CameraScanScreen(
                     .padding(bottom = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Bộ chọn chế độ Quét (1 Bài vs Quét Cả Lớp)
+                Row(
+                    modifier = Modifier
+                        .padding(bottom = 8.dp)
+                        .background(Color(0xBB0B1120), RoundedCornerShape(20.dp))
+                        .border(BorderStroke(1.dp, Color(0x3334D399)), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (!isBatchMode) EmeraldPrimary else Color.Transparent,
+                        modifier = Modifier.clickable { isBatchMode = false }
+                    ) {
+                        Text(
+                            text = "⚡ Chấm 1 bài",
+                            color = if (!isBatchMode) Color(0xFF064E3B) else Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isBatchMode) EmeraldPrimary else Color.Transparent,
+                        modifier = Modifier.clickable { isBatchMode = true }
+                    ) {
+                        Text(
+                            text = "📚 Quét cả lớp (${batchBitmaps.size})",
+                            color = if (isBatchMode) Color(0xFF064E3B) else Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                // Khay chứa bài đã chụp trong chế độ quét liên tục
+                if (isBatchMode && batchBitmaps.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            batchBitmaps.forEachIndexed { idx, bmp ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 50.dp, height = 66.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .border(BorderStroke(1.5.dp, EmeraldPrimary), RoundedCornerShape(8.dp))
+                                ) {
+                                    Image(
+                                        bitmap = bmp.asImageBitmap(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    Text(
+                                        text = "#${idx + 1}",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .background(Color(0xCC000000), RoundedCornerShape(topEnd = 4.dp))
+                                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .size(18.dp)
+                                            .background(Color(0xDDEF4444), CircleShape)
+                                            .clickable { batchBitmaps.removeAt(idx) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        androidx.compose.material3.Button(
+                            onClick = {
+                                onBatchCapture?.invoke(batchBitmaps.toList(), selectedClass)
+                                batchBitmaps.clear()
+                            },
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Bắt đầu chấm cả lớp (${batchBitmaps.size} bài) 🚀",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF064E3B),
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+
                 // Grading Mode Switcher (Chính tả vs Tập làm văn) đặt ngay trên nút chụp thuận tiện
                 Row(
                     modifier = Modifier.padding(bottom = 12.dp),

@@ -5,9 +5,12 @@ import android.graphics.Bitmap
 import android.util.Base64
 import com.example.data.api.ClassItem
 import com.example.data.api.GradeApiRequest
+import com.example.data.api.LoginRequest
 import com.example.data.api.NetworkClient
 import com.example.data.api.ServerGradeSyncRequest
 import com.example.data.api.StudentItem
+import com.example.data.api.UpdateGradeRequest
+import com.example.data.api.UserData
 import com.example.data.local.AppDatabase
 import com.example.data.local.GradeRecordDao
 import com.example.data.local.GradeRecordEntity
@@ -23,6 +26,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.UUID
+
+// Định nghĩa ngoại lệ chuyên dụng khi giao tiếp máy chủ chấm bài
+class ServerGradeException(
+    override val message: String,
+    val httpCode: Int? = null,
+    cause: Throwable? = null
+) : Exception(message, cause)
 
 class GradeRepository(
     private val context: Context,
@@ -48,11 +58,15 @@ class GradeRepository(
         val startTime = System.currentTimeMillis()
         val imageBase64 = encodeBitmapToBase64(bitmap)
         val effectiveClassName = className.ifBlank { "Lớp ${studentGrade}A" }
-        var errorReason: String? = null
 
-        try {
-            val apiService = NetworkClient.createService(serverUrl)
-            val response = apiService.submitForGrading(
+        val apiService = try {
+            NetworkClient.createService(serverUrl)
+        } catch (e: Exception) {
+            throw ServerGradeException("Địa chỉ máy chủ '$serverUrl' không hợp lệ: ${e.localizedMessage}")
+        }
+
+        val response = try {
+            apiService.submitForGrading(
                 GradeApiRequest(
                     imageBase64 = imageBase64,
                     studentGrade = studentGrade,
@@ -62,73 +76,84 @@ class GradeRepository(
                     essayType = essayType
                 )
             )
-
-            if (response.isSuccessful && response.body() != null) {
-                val body = response.body()!!
-                val apiCrit = body.criteria
-                val criteria = if (apiCrit != null) {
-                    GradeCriteria(
-                        spellingScore = apiCrit.spellingScore,
-                        formatScore = apiCrit.formatScore,
-                        contentScore = apiCrit.contentScore,
-                        creativityScore = apiCrit.creativityScore,
-                        totalScore = apiCrit.totalScore
-                    )
-                } else {
-                    GradeCriteria(3.0f, 2.5f, 1.8f, 0.7f, 8.0f)
-                }
-
-                val errors = body.errors?.mapIndexed { index, err ->
-                    ErrorBox(
-                        id = err.id ?: "err_$index",
-                        originalWord = err.originalWord,
-                        correctedWord = err.correctedWord,
-                        errorType = err.errorType,
-                        explanation = err.explanation,
-                        penalty = err.penalty,
-                        x1 = err.x1,
-                        y1 = err.y1,
-                        x2 = err.x2,
-                        y2 = err.y2,
-                        lineNumber = err.lineNumber,
-                        // Tọa độ tương đối từ YOLOv8 (0.0–1.0) cho Bounding Box trên ảnh thật
-                        rel_x1 = err.relX1 ?: err.x1,
-                        rel_y1 = err.relY1 ?: err.y1,
-                        rel_w = err.relW ?: (err.x2 - err.x1).coerceAtLeast(0.05f),
-                        rel_h = err.relH ?: (err.y2 - err.y1).coerceAtLeast(0.04f)
-                    )
-                } ?: emptyList()
-
-                val result = GradeResult(
-                    id = UUID.randomUUID().toString(),
-                    timestamp = System.currentTimeMillis(),
-                    studentName = body.studentName ?: studentName,
-                    className = body.className ?: effectiveClassName,
-                    essayTitle = body.essayTitle ?: "Bài thi Viết tay Tiểu học",
-                    criteria = criteria,
-                    pedagogicalComment = body.pedagogicalComment ?: "Bài làm có nhiều cố gắng, cần chú ý chính tả.",
-                    pedagogicalComments = body.pedagogicalComments ?: emptyList(),
-                    extractedText = body.extractedText ?: "Văn bản bài thi chữ viết tay",
-                    correctedFullText = body.correctedFullText ?: "",
-                    errors = errors,
-                    processingTimeMs = body.processingTimeMs ?: (System.currentTimeMillis() - startTime),
-                    serverSource = body.serverSource ?: "Raspberry Pi Server (Cloudflare Tunnel)"
-                )
-                saveRecord(result)
-                return@withContext result
-            } else {
-                errorReason = "Mã lỗi HTTP ${response.code()}"
-                android.util.Log.e("GradeRepository", "API HTTP Error: HTTP ${response.code()} from $serverUrl")
-            }
         } catch (e: Exception) {
-            errorReason = e.localizedMessage ?: e.javaClass.simpleName
-            android.util.Log.e("GradeRepository", "API Exception calling $serverUrl: $errorReason", e)
+            val netErrMsg = when {
+                e is java.net.ConnectException -> "Không thể kết nối tới máy chủ tại $serverUrl. Hãy kiểm tra xem server Next.js đã bật chưa và điện thoại có chung mạng Wi-Fi không."
+                e is java.net.SocketTimeoutException -> "Hết thời gian chờ phản hồi (Timeout) từ máy chủ $serverUrl. Quá trình xử lý AI vượt quá thời gian cho phép."
+                e is java.net.UnknownHostException -> "Không tìm thấy địa chỉ IP/tên miền máy chủ: $serverUrl. Vui lòng kiểm tra lại cấu hình trạm."
+                else -> "Lỗi kết nối mạng: ${e.localizedMessage ?: e.javaClass.simpleName}"
+            }
+            throw ServerGradeException(netErrMsg, cause = e)
         }
 
-        // Intelligent local Edge AI Pipeline simulation
-        val simulatedResult = generateSimulatedAnalysis(bitmap, startTime, errorReason, serverUrl)
-        saveRecord(simulatedResult)
-        simulatedResult
+        if (!response.isSuccessful || response.body() == null) {
+            val errBody = try { response.errorBody()?.string() } catch (_: Exception) { null }
+            val errMsg = "Máy chủ phản hồi mã lỗi HTTP ${response.code()}${if (!errBody.isNullOrBlank()) ": $errBody" else ""}. Vui lòng kiểm tra log của máy chủ ViHand Grade."
+            throw ServerGradeException(errMsg, httpCode = response.code())
+        }
+
+        val body = response.body()!!
+        if (body.status == "error") {
+            throw ServerGradeException("Máy chủ báo lỗi khi chấm bài thi.")
+        }
+
+        val apiCrit = body.criteria
+        val criteria = if (apiCrit != null) {
+            GradeCriteria(
+                spellingScore = apiCrit.spellingScore,
+                formatScore = apiCrit.formatScore,
+                contentScore = apiCrit.contentScore,
+                creativityScore = apiCrit.creativityScore,
+                totalScore = apiCrit.totalScore
+            )
+        } else {
+            GradeCriteria(3.0f, 2.5f, 1.8f, 0.7f, 8.0f)
+        }
+
+        val errors = body.errors?.mapIndexed { index, err ->
+            ErrorBox(
+                id = err.id ?: "err_$index",
+                originalWord = err.originalWord,
+                correctedWord = err.correctedWord,
+                errorType = err.errorType,
+                explanation = err.explanation,
+                penalty = err.penalty,
+                x1 = err.x1,
+                y1 = err.y1,
+                x2 = err.x2,
+                y2 = err.y2,
+                lineNumber = err.lineNumber,
+                rel_x1 = err.relX1 ?: err.x1,
+                rel_y1 = err.relY1 ?: err.y1,
+                rel_w = err.relW ?: (err.x2 - err.x1).coerceAtLeast(0.05f),
+                rel_h = err.relH ?: (err.y2 - err.y1).coerceAtLeast(0.04f)
+            )
+        } ?: emptyList()
+
+        val result = GradeResult(
+            id = body.serverGradeId ?: UUID.randomUUID().toString(),
+            timestamp = System.currentTimeMillis(),
+            studentName = body.studentName ?: studentName,
+            className = body.className ?: effectiveClassName,
+            essayTitle = body.essayTitle ?: "Bài thi Viết tay Tiểu học",
+            criteria = criteria,
+            pedagogicalComment = body.pedagogicalComment ?: "Bài làm có nhiều cố gắng, cần chú ý chính tả.",
+            pedagogicalComments = body.pedagogicalComments ?: emptyList(),
+            extractedText = body.extractedText ?: "Văn bản bài thi chữ viết tay",
+            correctedFullText = body.correctedFullText ?: "",
+            errors = errors,
+            processingTimeMs = body.processingTimeMs ?: (System.currentTimeMillis() - startTime),
+            serverSource = body.serverSource ?: "ViHand Grade Server (vihand.db)"
+        )
+
+        // Lưu vào Room DB làm bản sao lưu đệm cục bộ (Local Cache)
+        try {
+            saveRecord(result)
+        } catch (e: Exception) {
+            android.util.Log.w("GradeRepository", "Không thể ghi bản sao lưu đệm Room: ${e.message}")
+        }
+
+        return@withContext result
     }
 
     suspend fun saveRecord(result: GradeResult): Long = withContext(Dispatchers.IO) {
@@ -328,6 +353,50 @@ class GradeRepository(
         }
     }
 
+    suspend fun login(serverUrl: String, req: LoginRequest): Result<UserData> = withContext(Dispatchers.IO) {
+        try {
+            val api = NetworkClient.createService(serverUrl)
+            val res = api.login(req)
+            if (res.isSuccessful && res.body()?.user != null) {
+                Result.success(res.body()!!.user!!)
+            } else {
+                val err = res.body()?.error ?: res.errorBody()?.string() ?: "Đăng nhập thất bại (HTTP ${res.code()})"
+                Result.failure(Exception(err))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateGradeOnServer(
+        serverUrl: String,
+        gradeId: String,
+        updatedErrors: List<ErrorBox>,
+        newCriteria: GradeCriteria,
+        pedagogicalComment: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val api = NetworkClient.createService(serverUrl)
+            val scoreStr = "${String.format(java.util.Locale.US, "%.1f", newCriteria.totalScore)}/10"
+            val breakdownJson = "{\"spelling\":${newCriteria.spellingScore},\"format\":${newCriteria.formatScore},\"content\":${newCriteria.contentScore},\"creativity\":${newCriteria.creativityScore}}"
+            val errorsJson = errorsAdapter.toJson(updatedErrors)
+            val res = api.updateGrade(
+                id = gradeId,
+                request = UpdateGradeRequest(
+                    corrections = errorsJson,
+                    score = scoreStr,
+                    scoreBreakdown = breakdownJson,
+                    pedagogicalComment = pedagogicalComment,
+                    feedback = pedagogicalComment
+                )
+            )
+            res.isSuccessful
+        } catch (e: Exception) {
+            android.util.Log.e("GradeRepository", "Lỗi cập nhật điểm lên server: ${e.message}")
+            false
+        }
+    }
+
     suspend fun syncAllGradesToServer(serverUrl: String): Pair<Int, Int> = withContext(Dispatchers.IO) {
         val records = dao.getAllRecordsList()
         var successCount = 0
@@ -362,6 +431,74 @@ class GradeRepository(
             }
         }
         Pair(successCount, failCount)
+    }
+
+    suspend fun fetchGradesFromServer(serverUrl: String, className: String? = null): List<GradeResult> = withContext(Dispatchers.IO) {
+        try {
+            val api = NetworkClient.createService(serverUrl)
+            val res = api.getGrades(className = className)
+            if (res.isSuccessful && res.body()?.grades != null) {
+                val serverList = res.body()!!.grades!!
+                serverList.map { item ->
+                    val (sp, fmt, cnt, crt) = parseScoreBreakdown(item.scoreBreakdown)
+                    val errorsList = parseErrorsList(item.corrections)
+                    val scoreVal = item.scoreNum ?: (item.score.split("/")[0].toFloatOrNull() ?: 0f)
+
+                    GradeResult(
+                        id = item.id,
+                        timestamp = System.currentTimeMillis(),
+                        studentName = item.studentName,
+                        className = item.className ?: "",
+                        essayTitle = item.assignmentTitle,
+                        criteria = GradeCriteria(
+                            spellingScore = sp,
+                            formatScore = fmt,
+                            contentScore = cnt,
+                            creativityScore = crt,
+                            totalScore = scoreVal
+                        ),
+                        pedagogicalComment = item.pedagogicalComment?.ifBlank { item.feedback ?: "" } ?: (item.feedback ?: ""),
+                        extractedText = item.originalText ?: "",
+                        correctedFullText = item.fixedText ?: "",
+                        errors = errorsList,
+                        processingTimeMs = item.processingTimeMs?.toLong() ?: 1200L,
+                        serverSource = "ViHand Grade Server Database (vihand.db)"
+                    )
+                }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("GradeRepository", "Lỗi tải sổ điểm từ server: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private data class GradeBreakdown(val spelling: Float, val format: Float, val content: Float, val creativity: Float)
+
+    private fun parseScoreBreakdown(json: String?): GradeBreakdown {
+        if (json.isNullOrBlank()) return GradeBreakdown(3.0f, 2.5f, 1.8f, 0.7f)
+        return try {
+            val mapType = Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java)
+            val adapter = moshi.adapter<Map<String, Any>>(mapType)
+            val map = adapter.fromJson(json) ?: return GradeBreakdown(3.0f, 2.5f, 1.8f, 0.7f)
+            val sp = (map["spelling"] as? Number)?.toFloat() ?: 3.0f
+            val fmt = (map["format"] as? Number)?.toFloat() ?: 2.5f
+            val cnt = (map["content"] as? Number)?.toFloat() ?: 1.8f
+            val crt = (map["creativity"] as? Number)?.toFloat() ?: 0.7f
+            GradeBreakdown(sp, fmt, cnt, crt)
+        } catch (_: Exception) {
+            GradeBreakdown(3.0f, 2.5f, 1.8f, 0.7f)
+        }
+    }
+
+    private fun parseErrorsList(json: String?): List<ErrorBox> {
+        if (json.isNullOrBlank() || json == "[]") return emptyList()
+        return try {
+            errorsAdapter.fromJson(json) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     companion object {

@@ -77,6 +77,8 @@ fun ServerSettingsScreen(
     onPing: () -> Unit,
     onSyncGrades: () -> Unit = {},
     onRefreshClassesAndStudents: () -> Unit = {},
+    currentUser: com.example.data.api.UserData? = null,
+    onLogout: (() -> Unit)? = null,
     isDarkTheme: Boolean = true,
     onToggleTheme: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -379,7 +381,7 @@ fun ServerSettingsScreen(
                     // Nút bắt đầu đồng bộ
                     Button(
                         onClick = onSyncGrades,
-                        enabled = !isSyncing && localRecordsCount > 0,
+                        enabled = !isSyncing,
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = primaryBrand),
                         modifier = Modifier.weight(1f)
@@ -391,15 +393,15 @@ fun ServerSettingsScreen(
                                 color = if (isDarkTheme) Color(0xFF064E3B) else Color.White
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Đang đồng bộ...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Đang tải sổ điểm...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         } else {
                             Icon(
-                                imageVector = Icons.Default.CloudUpload,
+                                imageVector = Icons.Default.Refresh,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Đồng bộ ngay", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Đồng bộ sổ điểm", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -495,6 +497,59 @@ fun ServerSettingsScreen(
                             checkedTrackColor = if (isDarkTheme) Color(0xFF065F46) else Color(0xFFA7F3D0)
                         )
                     )
+                }
+            }
+        }
+
+        // Account Session Card
+        if (currentUser != null || onLogout != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = AppTheme.colors.card),
+                border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "TÀI KHOẢN HIỆN TẠI",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = darkEmeraldText,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = currentUser?.name ?: "Người dùng ViHand",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = AppTheme.colors.textPrimary
+                            )
+                            Text(
+                                text = "Vai trò: ${if (currentUser?.role == "student") "Học sinh" else "Giáo viên"}${if (!currentUser?.className.isNullOrBlank()) " (${currentUser?.className})" else ""}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppTheme.colors.textMuted
+                            )
+                        }
+
+                        if (onLogout != null) {
+                            androidx.compose.material3.OutlinedButton(
+                                onClick = onLogout,
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFFEF4444)
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f))
+                            ) {
+                                Text("Đăng xuất", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
+                        }
+                    }
                 }
             }
         }

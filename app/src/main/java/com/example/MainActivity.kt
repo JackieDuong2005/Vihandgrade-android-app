@@ -59,10 +59,15 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.LaunchedEffect
 import com.example.data.repository.SampleEssays
@@ -71,9 +76,11 @@ import com.example.ui.screens.DictationScreen
 import com.example.ui.screens.GradingResultScreen
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.ReportsAnalyticsScreen
 import com.example.ui.screens.ServerSettingsScreen
 import com.example.ui.theme.AppTheme
+import com.example.ui.theme.AccentCoral
 import com.example.ui.theme.EmeraldPrimary
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.GradingUiState
@@ -87,12 +94,36 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val isDarkTheme by viewModel.isDarkTheme.collectAsStateWithLifecycle()
+            val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+            val loginLoading by viewModel.loginLoading.collectAsStateWithLifecycle()
+            val loginError by viewModel.loginError.collectAsStateWithLifecycle()
+            val serverUrl by viewModel.serverUrl.collectAsStateWithLifecycle()
+
             MyApplicationTheme(darkTheme = isDarkTheme) {
-                ViHandGradeApp(
-                    viewModel = viewModel,
-                    isDarkTheme = isDarkTheme,
-                    onToggleTheme = { viewModel.toggleDarkTheme() }
-                )
+                if (!isLoggedIn) {
+                    LoginScreen(
+                        isLoading = loginLoading,
+                        errorMessage = loginError,
+                        serverUrl = serverUrl,
+                        onLogin = { username, password ->
+                            viewModel.login(username, password)
+                        },
+                        onLoginAsGuest = { role: String ->
+                            viewModel.loginAsGuest(role)
+                        },
+                        onSaveServerUrl = { newUrl ->
+                            viewModel.updateServerUrl(newUrl)
+                        },
+                        isDarkTheme = isDarkTheme,
+                        onToggleTheme = { viewModel.toggleDarkTheme() }
+                    )
+                } else {
+                    ViHandGradeApp(
+                        viewModel = viewModel,
+                        isDarkTheme = isDarkTheme,
+                        onToggleTheme = { viewModel.toggleDarkTheme() }
+                    )
+                }
             }
         }
     }
@@ -104,6 +135,7 @@ fun ViHandGradeApp(
     isDarkTheme: Boolean = false,
     onToggleTheme: () -> Unit = {}
 ) {
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val gradingState by viewModel.gradingState.collectAsStateWithLifecycle()
     val currentResult by viewModel.currentResult.collectAsStateWithLifecycle()
     val selectedErrorId by viewModel.selectedErrorId.collectAsStateWithLifecycle()
@@ -115,6 +147,7 @@ fun ViHandGradeApp(
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val classList by viewModel.classList.collectAsStateWithLifecycle()
     val studentList by viewModel.studentList.collectAsStateWithLifecycle()
+    val serverGrades by viewModel.serverGradesList.collectAsStateWithLifecycle()
 
     // 5 Screen tabs matching the HTML Mockup: "home" (default), "grade", "camera", "dictation", "settings"
     var activeTab by remember { mutableStateOf("home") }
@@ -256,7 +289,6 @@ fun ViHandGradeApp(
                         CameraScanScreen(
                             onCapture = { bitmap: Bitmap ->
                                 viewModel.gradeBitmap(bitmap)
-                                activeTab = "grade"
                             },
                             onCaptureWithDetails = { bitmap, cls, std, _ ->
                                 viewModel.gradeBitmap(
@@ -264,7 +296,9 @@ fun ViHandGradeApp(
                                     studentName = std,
                                     className = cls
                                 )
-                                activeTab = "grade"
+                            },
+                            onBatchCapture = { bitmaps, selectedClass ->
+                                viewModel.gradeBatchBitmaps(bitmaps, selectedClass)
                             },
                             classList = classList.map { it.name },
                             studentList = studentList,
@@ -281,6 +315,7 @@ fun ViHandGradeApp(
                             onBack = { activeTab = "home" },
                             onGradeAnother = { activeTab = "camera" },
                             onSelectSample = { sample -> viewModel.loadSample(sample) },
+                            onSaveModifiedGrade = { modified -> viewModel.saveModifiedGrade(modified) },
                             isDarkTheme = isDarkTheme,
                             onToggleTheme = onToggleTheme
                         )
@@ -298,15 +333,18 @@ fun ViHandGradeApp(
                             localRecordsCount = historyList.size,
                             onSaveUrl = { newUrl -> viewModel.updateServerUrl(newUrl) },
                             onPing = { viewModel.testConnection() },
-                            onSyncGrades = { viewModel.syncAllGradesToServer() },
+                            onSyncGrades = { viewModel.fetchServerGrades() },
                             onRefreshClassesAndStudents = { viewModel.fetchClassesAndStudents() },
+                            currentUser = currentUser,
+                            onLogout = { viewModel.logout() },
                             isDarkTheme = isDarkTheme,
                             onToggleTheme = onToggleTheme
                         )
                     }
                     "history" -> {
+                        val displayRecords = if (serverGrades.isNotEmpty()) serverGrades else historyList
                         HistoryScreen(
-                            records = historyList,
+                            records = displayRecords,
                             onSelectRecord = { record ->
                                 viewModel.loadSample(record)
                                 activeTab = "grade"
@@ -389,6 +427,79 @@ fun ViHandGradeApp(
                         }
                     }
                 }
+            }
+
+            // Universal Error Dialog when Server connection fails or Server returns error
+            if (gradingState is GradingUiState.Error) {
+                val errState = gradingState as GradingUiState.Error
+                AlertDialog(
+                    onDismissRequest = { viewModel.resetGradingState() },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = AccentCoral,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    },
+                    title = {
+                        Text(
+                            text = "Không Thể Kết Nối Máy Chủ AI",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.textPrimary
+                        )
+                    },
+                    text = {
+                        Column {
+                            Text(
+                                text = errState.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTheme.colors.textSecondary
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Surface(
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                color = AppTheme.colors.background,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(
+                                        text = "📍 Địa chỉ máy chủ hiện tại:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AppTheme.colors.textPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = serverUrl,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = EmeraldPrimary,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.resetGradingState()
+                                activeTab = "settings"
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Đến Cài Đặt IP", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { viewModel.resetGradingState() }) {
+                            Text("Đóng", color = AppTheme.colors.textSecondary)
+                        }
+                    }
+                )
             }
         }
     }

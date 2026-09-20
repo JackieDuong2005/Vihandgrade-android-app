@@ -59,7 +59,10 @@ data class GradeApiResponse(
     @Json(name = "correctedFullText") val correctedFullText: String? = null,
     @Json(name = "errors") val errors: List<ApiErrorBox>? = null,
     @Json(name = "processingTimeMs") val processingTimeMs: Long? = null,
-    @Json(name = "serverSource") val serverSource: String? = null
+    @Json(name = "serverSource") val serverSource: String? = null,
+    @Json(name = "serverGradeId") val serverGradeId: String? = null,
+    @Json(name = "imagePath") val imagePath: String? = null,
+    @Json(name = "createdAt") val createdAt: String? = null
 )
 
 // ============================================================
@@ -125,4 +128,72 @@ data class ServerGradeSyncRequest(
     @Json(name = "pedagogicalComment") val pedagogicalComment: String = "",
     @Json(name = "feedback") val feedback: String = ""
 )
+
+// ============================================================
+// SERVER GRADES LIST MODELS (Đồng bộ 2 chiều Web -> Mobile)
+// ============================================================
+@JsonClass(generateAdapter = true)
+data class ServerGradeItem(
+    @Json(name = "id") val id: String,
+    @Json(name = "gradingMode") val gradingMode: String? = "dictation",
+    @Json(name = "studentName") val studentName: String,
+    @Json(name = "assignmentTitle") val assignmentTitle: String,
+    @Json(name = "className") val className: String? = "",
+    @Json(name = "originalText") val originalText: String? = "",
+    @Json(name = "fixedText") val fixedText: String? = "",
+    @Json(name = "corrections") val corrections: String? = "[]",
+    @Json(name = "score") val score: String,
+    @Json(name = "scoreNum") val scoreNum: Float? = null,
+    @Json(name = "scoreBreakdown") val scoreBreakdown: String? = "",
+    @Json(name = "feedback") val feedback: String? = "",
+    @Json(name = "pedagogicalComment") val pedagogicalComment: String? = "",
+    @Json(name = "overallRating") val overallRating: String? = "",
+    @Json(name = "processingTimeMs") val processingTimeMs: Int? = 0,
+    @Json(name = "imagePath") val imagePath: String? = "",
+    @Json(name = "createdAt") val createdAt: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class ServerGradesResponse(
+    @Json(name = "grades") val grades: List<ServerGradeItem>? = null
+)
+
+// ============================================================
+// AUTH & LOGIN MODELS (Phân quyền RBAC)
+// ============================================================
+@JsonClass(generateAdapter = true)
+data class LoginRequest(
+    @Json(name = "username") val username: String,
+    @Json(name = "password") val password: String
+)
+
+@JsonClass(generateAdapter = true)
+data class UserData(
+    @Json(name = "id") val id: String,
+    @Json(name = "name") val name: String,
+    @Json(name = "username") val username: String,
+    @Json(name = "role") val role: String = "teacher", // "teacher" | "student" | "admin"
+    @Json(name = "className") val className: String? = "",
+    @Json(name = "classes") val classes: List<String>? = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class LoginResponse(
+    @Json(name = "user") val user: UserData? = null,
+    @Json(name = "error") val error: String? = null
+)
+
+// ============================================================
+// GRADE EDITING MODELS (Chỉnh sửa Bounding Box cảm ứng)
+// ============================================================
+@JsonClass(generateAdapter = true)
+data class UpdateGradeRequest(
+    @Json(name = "corrections") val corrections: String? = null,
+    @Json(name = "score") val score: String? = null,
+    @Json(name = "scoreBreakdown") val scoreBreakdown: String? = null,
+    @Json(name = "pedagogicalComment") val pedagogicalComment: String? = null,
+    @Json(name = "feedback") val feedback: String? = null
+)
+
+
 

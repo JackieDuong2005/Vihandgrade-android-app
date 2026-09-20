@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Book
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DeviceHub
 import androidx.compose.material.icons.filled.Edit
@@ -125,6 +127,7 @@ fun GradingResultScreen(
     onToggleTheme: () -> Unit = {},
     isDarkTheme: Boolean = true,
     onSelectSample: ((GradeResult) -> Unit)? = null,
+    onSaveModifiedGrade: ((GradeResult) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -135,6 +138,10 @@ fun GradingResultScreen(
     var activeTabMode by remember { mutableStateOf("canvas") } // "canvas", "diff", "skills"
     var canvasSubMode by remember { mutableStateOf("notebook") } // "notebook", "photo"
     var showCertificateDialog by remember { mutableStateOf(false) }
+    var showAddErrorDialog by remember { mutableStateOf(false) }
+
+    // Dynamic Errors state (supports deleting and adding manual errors)
+    var currentErrors by remember(result) { mutableStateOf(result.errors) }
 
     // Teacher Override Score State
     var isOverrideOpen by remember { mutableStateOf(false) }
@@ -156,7 +163,28 @@ fun GradingResultScreen(
     var currentComment by remember(result) { mutableStateOf(result.pedagogicalComment) }
     var isEditingComment by remember { mutableStateOf(false) }
 
-    val selectedError = result.errors.find { it.id == selectedErrorId } ?: result.errors.firstOrNull()
+    val hasModifications = currentErrors != result.errors ||
+            overrideSpelling != result.criteria.spellingScore ||
+            overrideFormat != result.criteria.formatScore ||
+            overrideContent != result.criteria.contentScore ||
+            overrideCreativity != result.criteria.creativityScore ||
+            currentComment != result.pedagogicalComment
+
+    val updatedResult = remember(result, currentErrors, overrideSpelling, overrideFormat, overrideContent, overrideCreativity, currentComment, currentTotalScore) {
+        result.copy(
+            criteria = result.criteria.copy(
+                spellingScore = overrideSpelling,
+                formatScore = overrideFormat,
+                contentScore = overrideContent,
+                creativityScore = overrideCreativity,
+                totalScore = currentTotalScore
+            ),
+            pedagogicalComment = currentComment,
+            errors = currentErrors
+        )
+    }
+
+    val selectedError = currentErrors.find { it.id == selectedErrorId } ?: currentErrors.firstOrNull()
 
     Scaffold(
         topBar = {
@@ -190,6 +218,27 @@ fun GradingResultScreen(
                     }
                 },
                 actions = {
+                    // Quick Save Button if modifications exist
+                    if (hasModifications && onSaveModifiedGrade != null) {
+                        Button(
+                            onClick = {
+                                onSaveModifiedGrade(updatedResult)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Đã lưu các sửa đổi sư phạm lên máy chủ!")
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentAmber),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.padding(end = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Save, contentDescription = null, tint = Color.Black, modifier = Modifier.size(13.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Lưu sửa", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
                     // Theme Switcher Button (Sun / Moon)
                     IconButton(
                         onClick = onToggleTheme,
@@ -209,13 +258,13 @@ fun GradingResultScreen(
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = null,
-                            tint = EmeraldPrimary,
+                            tint = if (hasModifications) AccentAmber else EmeraldPrimary,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Đã lưu",
-                            color = EmeraldPrimary,
+                            text = if (hasModifications) "Có chỉnh sửa" else "Đã lưu",
+                            color = if (hasModifications) AccentAmber else EmeraldPrimary,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -507,7 +556,7 @@ fun GradingResultScreen(
 
                         if (canvasSubMode == "notebook") {
                             HandwritingCanvas(
-                                result = result,
+                                result = updatedResult,
                                 selectedErrorId = selectedErrorId,
                                 onSelectError = { err ->
                                     onSelectError(err.id)
@@ -516,7 +565,7 @@ fun GradingResultScreen(
                             )
                         } else {
                             OriginalPhotoBBoxView(
-                                result = result,
+                                result = updatedResult,
                                 selectedErrorId = selectedErrorId,
                                 onSelectError = { err: com.example.data.model.ErrorBox ->
                                     onSelectError(err.id)
@@ -542,57 +591,87 @@ fun GradingResultScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Chạm vào khung đỏ hoặc nút bên dưới để xem gợi ý sửa",
+                                text = "Chạm vào khung đỏ để sửa hoặc bấm nút bên dưới",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isDarkTheme) EmeraldLight else Color(0xFF047857),
                                 fontWeight = FontWeight.Medium
                             )
                         }
 
-                        // Error selection chips row
-                        if (result.errors.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(
+                        // Error selection chips row + Add manual error chip
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Manual Add Error Button
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = if (isDarkTheme) Color(0xFF1E293B) else Color(0xFFEFF6FF),
+                                border = BorderStroke(1.dp, if (isDarkTheme) Color(0xFF3B82F6) else Color(0xFF60A5FA)),
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    .clickable {
+                                        showAddErrorDialog = true
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                    .testTag("add_manual_error_btn")
                             ) {
-                                result.errors.forEachIndexed { idx, err ->
-                                    val isSelected = (selectedErrorId == err.id) || (selectedErrorId == null && idx == 0)
-                                    Surface(
-                                        shape = RoundedCornerShape(20.dp),
-                                        color = if (isSelected) Color(0xFFD97706) else (if (isDarkTheme) Color(0xFF1E293B) else Color(0xFFFEE2E2)),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (isSelected) Color(0xFFF59E0B) else (if (isDarkTheme) Color(0xFFEF4444).copy(alpha = 0.5f) else Color(0xFFFCA5A5))
-                                        ),
-                                        modifier = Modifier
-                                            .clickable {
-                                                onSelectError(err.id)
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            }
-                                            .testTag("error_chip_${idx + 1}")
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "[${idx + 1}] ${err.originalWord}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (isSelected) Color.White else (if (isDarkTheme) Color(0xFFFCA5A5) else Color(0xFF991B1B)),
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "${err.penalty}đ",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = if (isSelected) Color(0xFFFEF3C7) else (if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFFB91C1C)),
-                                                fontSize = 10.sp
-                                            )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        tint = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "+ Bắt thêm lỗi",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            currentErrors.forEachIndexed { idx, err ->
+                                val isSelected = (selectedErrorId == err.id) || (selectedErrorId == null && idx == 0)
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = if (isSelected) Color(0xFFD97706) else (if (isDarkTheme) Color(0xFF1E293B) else Color(0xFFFEE2E2)),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isSelected) Color(0xFFF59E0B) else (if (isDarkTheme) Color(0xFFEF4444).copy(alpha = 0.5f) else Color(0xFFFCA5A5))
+                                    ),
+                                    modifier = Modifier
+                                        .clickable {
+                                            onSelectError(err.id)
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         }
+                                        .testTag("error_chip_${idx + 1}")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "[${idx + 1}] ${err.originalWord}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isSelected) Color.White else (if (isDarkTheme) Color(0xFFFCA5A5) else Color(0xFF991B1B)),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "${err.penalty}đ",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isSelected) Color(0xFFFEF3C7) else (if (isDarkTheme) Color(0xFF94A3B8) else Color(0xFFB91C1C)),
+                                            fontSize = 10.sp
+                                        )
                                     }
                                 }
                             }
@@ -709,6 +788,40 @@ fun GradingResultScreen(
                                     color = AppTheme.colors.textMuted,
                                     lineHeight = 18.sp
                                 )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Delete false positive error button
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            val deletedError = selectedError
+                                            currentErrors = currentErrors.filter { it.id != deletedError.id }
+                                            overrideSpelling = (overrideSpelling + deletedError.penalty).coerceAtMost(3.0f)
+                                            onSelectError(currentErrors.firstOrNull()?.id)
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("Đã xóa lỗi '${deletedError.originalWord}' và hoàn ${deletedError.penalty}đ cho bài thi")
+                                            }
+                                        },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentCoral),
+                                        border = BorderStroke(1.dp, AccentCoral.copy(alpha = 0.5f)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier.testTag("delete_error_btn")
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "Xóa lỗi này (AI nhận nhầm)",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1096,9 +1209,42 @@ fun GradingResultScreen(
                 }
             }
 
-            // Action Row: "Lưu Điểm & Báo Phụ Huynh", "Chụp Tiếp"
+            // Action Row: "Lưu Điểm & Báo Phụ Huynh", "Lưu Sửa Đổi Lên Máy Chủ", "Chụp Tiếp"
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Highlighted Server Sync button if changes exist
+                    if (hasModifications && onSaveModifiedGrade != null) {
+                        Button(
+                            onClick = {
+                                onSaveModifiedGrade(updatedResult)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Đã đồng bộ sửa đổi sư phạm lên máy chủ!")
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("save_server_changes_btn"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AccentAmber
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = null,
+                                tint = Color.Black
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Lưu Sửa Đổi Lên Máy Chủ 💾",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
                     Button(
                         onClick = {
                             showCertificateDialog = true
@@ -1156,9 +1302,100 @@ fun GradingResultScreen(
         }
         }
 
+        // Dialog for adding manual error
+        if (showAddErrorDialog) {
+            var manualOriginal by remember { mutableStateOf("") }
+            var manualCorrected by remember { mutableStateOf("") }
+            var manualType by remember { mutableStateOf("Chính tả") }
+            val manualPenalty = 0.5f
+
+            Dialog(onDismissRequest = { showAddErrorDialog = false }) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = AppTheme.colors.card,
+                    border = BorderStroke(1.dp, AppTheme.colors.border),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Text(
+                            text = "Bắt lỗi thủ công (Giáo viên)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.textPrimary
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = manualOriginal,
+                            onValueChange = { manualOriginal = it },
+                            label = { Text("Từ viết sai (ví dụ: si nghĩ)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = manualCorrected,
+                            onValueChange = { manualCorrected = it },
+                            label = { Text("Từ sửa đúng (ví dụ: suy nghĩ)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = manualType,
+                            onValueChange = { manualType = it },
+                            label = { Text("Loại lỗi (Chính tả / Dấu câu / Ngữ pháp)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            androidx.compose.material3.TextButton(onClick = { showAddErrorDialog = false }) {
+                                Text("Hủy", color = AppTheme.colors.textMuted)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    if (manualOriginal.isNotBlank() && manualCorrected.isNotBlank()) {
+                                        val newId = "manual_${System.currentTimeMillis()}"
+                                        val newErr = ErrorBox(
+                                            id = newId,
+                                            originalWord = manualOriginal.trim(),
+                                            correctedWord = manualCorrected.trim(),
+                                            errorType = manualType.trim(),
+                                            explanation = "Lỗi do giáo viên bổ sung trực tiếp trên bài chấm.",
+                                            penalty = manualPenalty,
+                                            x1 = 0.35f,
+                                            y1 = 0.45f,
+                                            x2 = 0.55f,
+                                            y2 = 0.51f
+                                        )
+                                        currentErrors = currentErrors + newErr
+                                        overrideSpelling = (overrideSpelling - manualPenalty).coerceAtLeast(0f)
+                                        onSelectError(newId)
+                                        showAddErrorDialog = false
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Đã thêm lỗi '$manualOriginal' và trừ ${manualPenalty}đ")
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                            ) {
+                                Text("Thêm lỗi", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (showCertificateDialog) {
             StudentCertificateDialog(
-                result = result,
+                result = updatedResult,
                 overrideTotalScore = currentTotalScore,
                 overrideRatingLevel = currentRatingLevel,
                 overrideSpelling = overrideSpelling,
@@ -1166,7 +1403,7 @@ fun GradingResultScreen(
                 overrideContent = overrideContent,
                 overrideCreativity = overrideCreativity,
                 overrideComment = currentComment,
-                isTeacherOverridden = (overrideSpelling != result.criteria.spellingScore || overrideFormat != result.criteria.formatScore || overrideContent != result.criteria.contentScore || overrideCreativity != result.criteria.creativityScore || currentComment != result.pedagogicalComment),
+                isTeacherOverridden = hasModifications,
                 isDarkTheme = isDarkTheme,
                 onDismiss = { showCertificateDialog = false },
                 onCopyZaloMessage = {
@@ -1176,7 +1413,7 @@ fun GradingResultScreen(
                         • Bài viết: ${result.essayTitle}
                         • Tổng điểm: ${"%.1f".format(currentTotalScore)}/10 ($currentRatingLevel)
                         • Điểm Chính tả: ${"%.1f".format(overrideSpelling)}/4.0 | Nét chữ: ${"%.1f".format(overrideFormat)}/3.0 | Nội dung: ${"%.1f".format(overrideContent)}/2.0
-                        • Lỗi chính tả phát hiện: ${result.errors.size} lỗi (${result.errors.joinToString(", ") { "${it.originalWord} -> ${it.correctedWord}" }})
+                        • Lỗi chính tả: ${currentErrors.size} lỗi (${currentErrors.joinToString(", ") { "${it.originalWord} -> ${it.correctedWord}" }})
                         • Lời cô giáo dặn dò: "$currentComment"
                         Trân trọng gửi gia đình để cùng phối hợp động viên bé rèn chữ mỗi ngày!
                     """.trimIndent()

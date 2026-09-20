@@ -4,7 +4,10 @@ import android.app.Application
 import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.api.LoginRequest
 import com.example.data.api.NetworkClient
+import com.example.data.api.UserData
+import com.example.data.local.UserSessionManager
 import com.example.data.model.ErrorBox
 import com.example.data.model.GradeResult
 import com.example.data.repository.GradeRepository
@@ -26,6 +29,20 @@ sealed class GradingUiState {
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = GradeRepository(application.applicationContext)
+    private val sessionManager = UserSessionManager(application.applicationContext)
+
+    // Auth & User State
+    private val _currentUser = MutableStateFlow<UserData?>(sessionManager.getUser())
+    val currentUser: StateFlow<UserData?> = _currentUser.asStateFlow()
+
+    private val _isLoggedIn = MutableStateFlow(sessionManager.isLoggedIn())
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    private val _loginLoading = MutableStateFlow(false)
+    val loginLoading: StateFlow<Boolean> = _loginLoading.asStateFlow()
+
+    private val _loginError = MutableStateFlow<String?>(null)
+    val loginError: StateFlow<String?> = _loginError.asStateFlow()
 
     private val _gradingState = MutableStateFlow<GradingUiState>(GradingUiState.Idle)
     val gradingState: StateFlow<GradingUiState> = _gradingState.asStateFlow()
@@ -74,12 +91,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    private val _serverGradesList = MutableStateFlow<List<GradeResult>>(emptyList())
+    val serverGradesList: StateFlow<List<GradeResult>> = _serverGradesList.asStateFlow()
+
+    private val _isLoadingServerGrades = MutableStateFlow(false)
+    val isLoadingServerGrades: StateFlow<Boolean> = _isLoadingServerGrades.asStateFlow()
+
     init {
         // Pre-populate sample in database if history is empty
         viewModelScope.launch {
             repository.saveRecord(SampleEssays.sample2Good)
             repository.saveRecord(SampleEssays.sample1Eureka)
             fetchClassesAndStudents()
+            fetchServerGrades()
         }
     }
 
@@ -103,6 +127,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val students = repository.getStudentsList(_serverUrl.value)
                 if (students.isNotEmpty()) _studentList.value = students
             } catch (_: Exception) {}
+        }
+    }
+
+    fun fetchServerGrades(className: String? = null) {
+        viewModelScope.launch {
+            _isLoadingServerGrades.value = true
+            try {
+                val list = repository.fetchGradesFromServer(_serverUrl.value, className)
+                if (list.isNotEmpty()) {
+                    _serverGradesList.value = list
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Lỗi fetchServerGrades: ${e.message}")
+            } finally {
+                _isLoadingServerGrades.value = false
+            }
         }
     }
 
@@ -161,8 +201,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _currentResult.value = result
                 _selectedErrorId.value = result.errors.firstOrNull()?.id
                 _gradingState.value = GradingUiState.Success(result)
+                // Tự động làm mới danh sách bài chấm từ Server về điện thoại
+                fetchServerGrades()
             } catch (e: Exception) {
-                _gradingState.value = GradingUiState.Error(e.localizedMessage ?: "Có lỗi khi chấm bài")
+                _gradingState.value = GradingUiState.Error(e.message ?: "Có lỗi khi kết nối máy chủ chấm bài")
             }
         }
     }
@@ -183,7 +225,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateServerUrl(newUrl: String) {
-        _serverUrl.value = newUrl
+        _serverUrl.value = newUrl.trim()
+        fetchClassesAndStudents()
+        fetchServerGrades()
+    }
+
+    fun resetGradingState() {
+        _gradingState.value = GradingUiState.Idle
     }
 
     fun testConnection() {
@@ -207,5 +255,125 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _currentResult.value = null
         _selectedErrorId.value = null
         _gradingState.value = GradingUiState.Idle
+    }
+
+    // ==========================================
+    // AUTH & RBAC ACTIONS
+    // ==========================================
+    fun login(username: String, password: String) {
+        viewModelScope.launch {
+            _loginLoading.value = true
+            _loginError.value = null
+            val result = repository.login(_serverUrl.value, LoginRequest(username, password))
+            _loginLoading.value = false
+            result.onSuccess { userData ->
+                sessionManager.saveUser(userData)
+                _currentUser.value = userData
+                _isLoggedIn.value = true
+                _loginError.value = null
+                // Tự động gán lớp quản lý nếu là GV
+                userData.classes?.firstOrNull()?.let { firstCls ->
+                    _selectedClass.value = firstCls
+                }
+                fetchClassesAndStudents()
+                fetchServerGrades()
+            }.onFailure { err ->
+                _loginError.value = err.message ?: "Tài khoản hoặc mật khẩu không chính xác"
+            }
+        }
+    }
+
+    fun loginAsGuest(role: String = "teacher") {
+        sessionManager.loginAsGuest(role)
+        _currentUser.value = sessionManager.getUser()
+        _isLoggedIn.value = true
+        _loginError.value = null
+        fetchClassesAndStudents()
+        fetchServerGrades()
+    }
+
+    fun logout() {
+        sessionManager.logout()
+        _currentUser.value = null
+        _isLoggedIn.value = false
+    }
+
+    // ==========================================
+    // CONTINUOUS BATCH SCAN MODE
+    // ==========================================
+    fun gradeBatchBitmaps(
+        bitmaps: List<Bitmap>,
+        className: String,
+        studentGrade: Int = 3
+    ) {
+        viewModelScope.launch {
+            val total = bitmaps.size
+            if (total == 0) return@launch
+
+            _gradingState.value = GradingUiState.Processing("Bắt đầu chấm cả lớp ($total bài)...", 0.05f)
+
+            var successCount = 0
+            var failCount = 0
+            var lastSuccessResult: GradeResult? = null
+
+            bitmaps.forEachIndexed { index, bmp ->
+                val currentNum = index + 1
+                val progress = currentNum.toFloat() / total.toFloat()
+                _gradingState.value = GradingUiState.Processing(
+                    "Đang chấm bài $currentNum / $total (${(progress * 100).toInt()}%)...",
+                    progress
+                )
+
+                try {
+                    val res = repository.gradeImage(
+                        bitmap = bmp,
+                        serverUrl = _serverUrl.value,
+                        studentGrade = studentGrade,
+                        studentName = "Học sinh $currentNum",
+                        className = className
+                    )
+                    successCount++
+                    lastSuccessResult = res
+                } catch (_: Exception) {
+                    failCount++
+                }
+            }
+
+            fetchServerGrades()
+
+            if (lastSuccessResult != null) {
+                _currentResult.value = lastSuccessResult
+                _selectedErrorId.value = lastSuccessResult?.errors?.firstOrNull()?.id
+                _gradingState.value = GradingUiState.Success(lastSuccessResult!!)
+            } else {
+                _gradingState.value = GradingUiState.Idle
+            }
+
+            _syncStatus.value = Pair(
+                failCount == 0,
+                "Hoàn thành chấm $total bài: Thành công $successCount bài, Lỗi $failCount bài."
+            )
+        }
+    }
+
+    // ==========================================
+    // TOUCH ERROR EDITOR & SCORE OVERRIDE
+    // ==========================================
+    fun saveModifiedGrade(modified: GradeResult) {
+        viewModelScope.launch {
+            _currentResult.value = modified
+            _selectedErrorId.value = modified.errors.firstOrNull()?.id
+            // Cập nhật Room DB
+            repository.saveRecord(modified)
+            // Cập nhật Server SQLite vihand.db
+            repository.updateGradeOnServer(
+                serverUrl = _serverUrl.value,
+                gradeId = modified.id,
+                updatedErrors = modified.errors,
+                newCriteria = modified.criteria,
+                pedagogicalComment = modified.pedagogicalComment
+            )
+            fetchServerGrades()
+        }
     }
 }
