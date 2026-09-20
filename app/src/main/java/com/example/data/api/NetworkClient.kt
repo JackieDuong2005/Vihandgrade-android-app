@@ -28,7 +28,13 @@ object NetworkClient {
         .build()
 
     fun createService(baseUrl: String = DEFAULT_BASE_URL): GradeApiService {
-        val normalizedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val trimmed = baseUrl.trim()
+        val withProtocol = if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+            "https://$trimmed"
+        } else {
+            trimmed
+        }
+        val normalizedUrl = if (withProtocol.endsWith("/")) withProtocol else "$withProtocol/"
         val retrofit = Retrofit.Builder()
             .baseUrl(normalizedUrl)
             .client(okHttpClient)

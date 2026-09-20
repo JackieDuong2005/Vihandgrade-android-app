@@ -104,7 +104,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.ErrorBox
 import com.example.data.model.GradeResult
-import com.example.data.repository.SampleEssays
 import com.example.ui.components.HandwritingCanvas
 import com.example.ui.components.NotebookBackground
 import com.example.ui.theme.AccentAmber
@@ -289,99 +288,7 @@ fun GradingResultScreen(
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-            // Quick Sample Switcher Chips Row
-            if (onSelectSample != null) {
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val isSample2 = result.studentName.contains("Hà Linh")
-                        val isSample1 = result.studentName.contains("Bảo Nam")
 
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSample2) (if (isDarkTheme) EmeraldPrimary.copy(alpha = 0.2f) else Color(0xFFD1FAE5)) else AppTheme.colors.card,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (isSample2) (if (isDarkTheme) EmeraldPrimary else Color(0xFF059669)) else AppTheme.colors.border
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onSelectSample(SampleEssays.sample2Good) }
-                                .testTag("sample_chip_1")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Description,
-                                    contentDescription = null,
-                                    tint = if (isSample2) (if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)) else AppTheme.colors.textMuted,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Column {
-                                    Text(
-                                        text = "Mẫu 1: Bà ngủ",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSample2) (if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)) else AppTheme.colors.textPrimary
-                                    )
-                                    Text(
-                                        text = "9.2đ • 1 lỗi",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = AppTheme.colors.textMuted,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSample1) (if (isDarkTheme) EmeraldPrimary.copy(alpha = 0.2f) else Color(0xFFD1FAE5)) else AppTheme.colors.card,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (isSample1) (if (isDarkTheme) EmeraldPrimary else Color(0xFF059669)) else AppTheme.colors.border
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onSelectSample(SampleEssays.sample1Eureka) }
-                                .testTag("sample_chip_2")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Description,
-                                    contentDescription = null,
-                                    tint = if (isSample1) (if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)) else AppTheme.colors.textMuted,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Column {
-                                    Text(
-                                        text = "Mẫu 2: Euréka",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSample1) (if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)) else AppTheme.colors.textPrimary
-                                    )
-                                    Text(
-                                        text = "7.0đ • 2 lỗi",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = AppTheme.colors.textMuted,
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
             // Processing server badge
             item {

@@ -62,8 +62,10 @@ import com.example.ui.theme.AppTheme
 import com.example.ui.theme.EmeraldPrimary
 
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.OutlinedButton
 
 @Composable
 fun ServerSettingsScreen(
@@ -77,6 +79,7 @@ fun ServerSettingsScreen(
     onPing: () -> Unit,
     onSyncGrades: () -> Unit = {},
     onRefreshClassesAndStudents: () -> Unit = {},
+    onClearLocalRecords: () -> Unit = {},
     currentUser: com.example.data.api.UserData? = null,
     onLogout: (() -> Unit)? = null,
     isDarkTheme: Boolean = true,
@@ -393,7 +396,7 @@ fun ServerSettingsScreen(
                                 color = if (isDarkTheme) Color(0xFF064E3B) else Color.White
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Đang tải sổ điểm...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Đang đồng bộ...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         } else {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
@@ -420,6 +423,26 @@ fun ServerSettingsScreen(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Cập nhật lớp", color = AppTheme.colors.textPrimary, fontSize = 12.sp)
+                    }
+                }
+
+                // Nút dọn sạch dữ liệu bài chấm offline nội bộ
+                if (localRecordsCount > 0) {
+                    OutlinedButton(
+                        onClick = onClearLocalRecords,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Color(0xFFEF4444)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Xóa $localRecordsCount bài chấm nội bộ (dọn sạch dữ liệu)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }

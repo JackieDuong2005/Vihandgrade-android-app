@@ -47,10 +47,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _gradingState = MutableStateFlow<GradingUiState>(GradingUiState.Idle)
     val gradingState: StateFlow<GradingUiState> = _gradingState.asStateFlow()
 
-    private val _currentResult = MutableStateFlow<GradeResult?>(SampleEssays.sample2Good)
+    private val _currentResult = MutableStateFlow<GradeResult?>(null)
     val currentResult: StateFlow<GradeResult?> = _currentResult.asStateFlow()
 
-    private val _selectedErrorId = MutableStateFlow<String?>(SampleEssays.sample2Good.errors.firstOrNull()?.id)
+    private val _selectedErrorId = MutableStateFlow<String?>(null)
     val selectedErrorId: StateFlow<String?> = _selectedErrorId.asStateFlow()
 
     private val _isDarkTheme = MutableStateFlow(false)
@@ -98,10 +98,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isLoadingServerGrades: StateFlow<Boolean> = _isLoadingServerGrades.asStateFlow()
 
     init {
-        // Pre-populate sample in database if history is empty
         viewModelScope.launch {
-            repository.saveRecord(SampleEssays.sample2Good)
-            repository.saveRecord(SampleEssays.sample1Eureka)
             fetchClassesAndStudents()
             fetchServerGrades()
         }
@@ -155,8 +152,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _isSyncing.value = false
                 if (fail == 0 && success > 0) {
                     _syncStatus.value = Pair(true, "Đã đồng bộ thành công $success bài chấm về trường!")
+                    fetchServerGrades()
                 } else if (success > 0) {
                     _syncStatus.value = Pair(true, "Đã gửi $success bài, lỗi $fail bài.")
+                    fetchServerGrades()
                 } else {
                     _syncStatus.value = Pair(false, "Không có bài cần gửi hoặc kết nối máy chủ gián đoạn.")
                 }
@@ -164,6 +163,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _isSyncing.value = false
                 _syncStatus.value = Pair(false, "Lỗi đồng bộ: ${e.localizedMessage}")
             }
+        }
+    }
+
+    fun clearAllRecords() {
+        viewModelScope.launch {
+            repository.deleteAllRecords()
+            _currentResult.value = null
+            _selectedErrorId.value = null
+            _syncStatus.value = Pair(true, "Đã xóa toàn bộ bài chấm nội bộ.")
         }
     }
 
@@ -188,7 +196,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             delay(180)
             _gradingState.value = GradingUiState.Processing("3/4. YOLOv8 quét tọa độ Bounding Box từng từ viết tay...", 0.75f)
             delay(150)
-            _gradingState.value = GradingUiState.Processing("4/4. ViT5 & Qwen SLM kiểm tra chính tả & sinh lời nhận xét...", 0.90f)
+            _gradingState.value = GradingUiState.Processing("4/4. ViT5 kiểm tra chính tả & đánh giá điểm số...", 0.90f)
 
             try {
                 val result = repository.gradeImage(
@@ -210,14 +218,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadSample(sample: GradeResult) {
-        viewModelScope.launch {
-            _gradingState.value = GradingUiState.Processing("Đang tải dữ liệu bài thi mẫu Euréka...", 0.5f)
-            delay(100)
-            _currentResult.value = sample
-            _selectedErrorId.value = sample.errors.firstOrNull()?.id
-            _gradingState.value = GradingUiState.Success(sample)
-            repository.saveRecord(sample)
-        }
+        _currentResult.value = sample
+        _selectedErrorId.value = sample.errors.firstOrNull()?.id
+        _gradingState.value = GradingUiState.Success(sample)
     }
 
     fun selectError(errorId: String?) {

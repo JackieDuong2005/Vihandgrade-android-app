@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -69,8 +70,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.window.Dialog
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.runtime.LaunchedEffect
-import com.example.data.repository.SampleEssays
 import com.example.ui.screens.CameraScanScreen
 import com.example.ui.screens.DictationScreen
 import com.example.ui.screens.GradingResultScreen
@@ -306,19 +308,60 @@ fun ViHandGradeApp(
                         )
                     }
                     "grade" -> {
-                        // Display active result or default sample
-                        val displayResult = currentResult ?: SampleEssays.sample2Good
-                        GradingResultScreen(
-                            result = displayResult,
-                            selectedErrorId = selectedErrorId,
-                            onSelectError = { errorId -> viewModel.selectError(errorId) },
-                            onBack = { activeTab = "home" },
-                            onGradeAnother = { activeTab = "camera" },
-                            onSelectSample = { sample -> viewModel.loadSample(sample) },
-                            onSaveModifiedGrade = { modified -> viewModel.saveModifiedGrade(modified) },
-                            isDarkTheme = isDarkTheme,
-                            onToggleTheme = onToggleTheme
-                        )
+                        val displayResult = currentResult ?: historyList.firstOrNull()
+                        if (displayResult != null) {
+                            GradingResultScreen(
+                                result = displayResult,
+                                selectedErrorId = selectedErrorId,
+                                onSelectError = { errorId -> viewModel.selectError(errorId) },
+                                onBack = { activeTab = "home" },
+                                onGradeAnother = { activeTab = "camera" },
+                                onSelectSample = { sample -> viewModel.loadSample(sample) },
+                                onSaveModifiedGrade = { modified -> viewModel.saveModifiedGrade(modified) },
+                                isDarkTheme = isDarkTheme,
+                                onToggleTheme = onToggleTheme
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Default.Description,
+                                        contentDescription = null,
+                                        tint = AppTheme.colors.textMuted,
+                                        modifier = Modifier.size(56.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "Chưa có bài chấm nào",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AppTheme.colors.textPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Vui lòng chụp ảnh hoặc tải lên bài thi học sinh để AI bắt đầu chấm điểm.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = AppTheme.colors.textMuted,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(20.dp))
+                                    Button(
+                                        onClick = { activeTab = "camera" },
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Chấm bài ngay", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
                     }
                     "dictation" -> {
                         DictationScreen(serverUrl = serverUrl)
@@ -333,8 +376,9 @@ fun ViHandGradeApp(
                             localRecordsCount = historyList.size,
                             onSaveUrl = { newUrl -> viewModel.updateServerUrl(newUrl) },
                             onPing = { viewModel.testConnection() },
-                            onSyncGrades = { viewModel.fetchServerGrades() },
+                            onSyncGrades = { viewModel.syncAllGradesToServer() },
                             onRefreshClassesAndStudents = { viewModel.fetchClassesAndStudents() },
+                            onClearLocalRecords = { viewModel.clearAllRecords() },
                             currentUser = currentUser,
                             onLogout = { viewModel.logout() },
                             isDarkTheme = isDarkTheme,

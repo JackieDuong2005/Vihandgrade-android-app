@@ -59,7 +59,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.GradeResult
-import com.example.data.repository.SampleEssays
 import com.example.ui.components.NotebookBackground
 import com.example.ui.theme.AccentAmber
 import com.example.ui.theme.AccentCoral
@@ -74,7 +73,7 @@ fun HomeScreen(
     historyList: List<GradeResult>,
     serverUrl: String,
     onOpenScanner: () -> Unit,
-    onSelectSample: (GradeResult) -> Unit,
+    onSelectSample: (GradeResult) -> Unit = {},
     onOpenHistory: () -> Unit,
     onOpenSettings: () -> Unit,
     onSelectHistoryItem: (GradeResult) -> Unit,
@@ -93,12 +92,12 @@ fun HomeScreen(
         label = "dotAlpha"
     )
 
-    // Dynamic metrics calculated from Room history records (falls back to sample defaults if history is empty)
-    val totalGradedDisplay = if (historyList.isNotEmpty()) historyList.size.toString() else "128"
-    val studentsCountDisplay = if (historyList.isNotEmpty()) historyList.map { it.studentName }.distinct().size.toString() else "42"
+    // Dynamic metrics calculated from Room history records
+    val totalGradedDisplay = historyList.size.toString()
+    val studentsCountDisplay = historyList.map { it.studentName }.distinct().size.toString()
     val avgScoreDisplay = if (historyList.isNotEmpty()) {
         String.format(java.util.Locale.US, "%.1f", historyList.map { it.criteria.totalScore }.average())
-    } else "8.4"
+    } else "0.0"
 
     NotebookBackground(modifier = modifier) {
         LazyColumn(
@@ -581,69 +580,74 @@ fun HomeScreen(
             }
         }
 
-        // Recent Papers List Matching HTML Mockup
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Item 1: Nguyễn Văn An — Lớp 3A1 (Quạt cho bà ngủ - 9.2đ)
-                RecentPaperCard(
-                    student = "Nguyễn Văn An — Lớp 3A1",
-                    meta = "Bài thơ: Quạt cho bà ngủ • Hôm nay",
-                    score = "9.2",
-                    label = "Xuất sắc",
-                    scoreColor = EmeraldPrimary,
-                    onClick = {
-                        onSelectSample(SampleEssays.sample2Good)
-                    }
-                )
+        // Danh sách 5 bài chấm gần nhất từ cơ sở dữ liệu thực tế
+        if (historyList.isNotEmpty()) {
+            items(historyList.take(5)) { record ->
+                val scoreVal = record.criteria.totalScore
+                val scoreColor = when {
+                    scoreVal >= 9.0f -> EmeraldPrimary
+                    scoreVal >= 8.0f -> EmeraldPrimary
+                    scoreVal >= 6.5f -> AccentAmber
+                    else -> Color(0xFFEF4444)
+                }
+                val label = when {
+                    scoreVal >= 9.0f -> "Xuất sắc"
+                    scoreVal >= 8.0f -> "Tốt"
+                    scoreVal >= 6.5f -> "Khá"
+                    else -> "Cần cố gắng"
+                }
+                val dateStr = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+                    .format(java.util.Date(record.timestamp))
 
-                // Item 2: Trần Mai Hoa — Lớp 3A1 (Người mẹ - 8.5đ)
                 RecentPaperCard(
-                    student = "Trần Mai Hoa — Lớp 3A1",
-                    meta = "Chính tả: Người mẹ • Hôm nay",
-                    score = "8.5",
-                    label = "Tốt",
-                    scoreColor = EmeraldPrimary,
+                    student = "${record.studentName} — Lớp ${record.className.ifBlank { "3A1" }}",
+                    meta = "${record.essayTitle} • $dateStr",
+                    score = String.format(java.util.Locale.US, "%.1f", scoreVal),
+                    label = label,
+                    scoreColor = scoreColor,
                     onClick = {
-                        onSelectSample(SampleEssays.sample3Spelling)
+                        onSelectHistoryItem(record)
                     }
                 )
-
-                // Item 3: Lê Hoàng Nam — Lớp 3A2 (Quê hương - 7.8đ)
-                RecentPaperCard(
-                    student = "Lê Hoàng Nam — Lớp 3A2",
-                    meta = "Tập làm văn: Quê hương • Hôm qua",
-                    score = "7.8",
-                    label = "Khá",
-                    scoreColor = AccentAmber,
-                    onClick = {
-                        onSelectSample(SampleEssays.sample1Eureka)
-                    }
-                )
+                Spacer(modifier = Modifier.height(10.dp))
             }
-        }
-
-        // Section: Bài thi mẫu cho Ban Giám Khảo Euréka
-        item {
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "BÀI THI MẪU CHO GIÁM KHẢO EURÉKA",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AccentAmber
-                )
+        } else {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = AppTheme.colors.card,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = null,
+                            tint = AppTheme.colors.textMuted,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Chưa có bài chấm nào",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.textPrimary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Nhấn biểu tượng camera ở giữa để bắt đầu chấm bài.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppTheme.colors.textMuted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
             }
-        }
-
-        items(SampleEssays.allSamples) { sample ->
-            EurekaSampleCard(
-                sample = sample,
-                onSelect = { onSelectSample(sample) }
-            )
         }
 
         item {
@@ -737,125 +741,3 @@ private fun RecentPaperCard(
     }
 }
 
-@Composable
-private fun EurekaSampleCard(
-    sample: GradeResult,
-    onSelect: () -> Unit
-) {
-    val isEureka = sample.sampleType == "eureka_demo"
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect() }
-            .testTag("eureka_sample_${sample.id}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = AppTheme.colors.card
-        ),
-        border = androidx.compose.foundation.BorderStroke(
-            if (isEureka) 1.5.dp else 1.dp,
-            if (isEureka) Color(0xFFF59E0B) else AppTheme.colors.border
-        )
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    if (isEureka) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFFB45309)
-                        ) {
-                            Text(
-                                text = "KỊCH BẢN THI ĐẤU EURÉKA",
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                fontSize = 9.sp
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                    Text(
-                        text = sample.essayTitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = AppTheme.colors.textPrimary
-                    )
-                    Text(
-                        text = "${sample.studentName} • ${sample.className}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AppTheme.colors.textMuted
-                    )
-                }
-
-                val scoreBadgeBg = when {
-                    sample.criteria.totalScore >= 8.5f -> if (AppTheme.colors.isDark) EmeraldPrimary else Color(0xFF059669)
-                    sample.criteria.totalScore >= 7.0f -> AccentAmber
-                    else -> AccentCoral
-                }
-                val scoreBadgeTextColor = when {
-                    sample.criteria.totalScore >= 8.5f -> if (AppTheme.colors.isDark) Color(0xFF0F172A) else Color.White
-                    sample.criteria.totalScore >= 7.0f -> Color(0xFF0F172A)
-                    else -> Color.White
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = scoreBadgeBg
-                ) {
-                    Text(
-                        text = "${"%.1f".format(sample.criteria.totalScore)}đ",
-                        color = scoreBadgeTextColor,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            if (sample.errors.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Lỗi: ",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = AccentCoral
-                    )
-                    sample.errors.take(2).forEach { err ->
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = if (AppTheme.colors.isDark) Color(0x33EF4444) else Color(0xFFFEE2E2),
-                            modifier = Modifier.padding(end = 6.dp)
-                        ) {
-                            Text(
-                                text = "${err.originalWord} -> ${err.correctedWord}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (AppTheme.colors.isDark) Color(0xFFFCA5A5) else Color(0xFFB91C1C),
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                fontSize = 10.sp
-                            )
-                        }
-                    }
-                }
-            } else {
-                Text(
-                    text = "✓ Vở sạch chữ đẹp, không có lỗi chính tả",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (AppTheme.colors.isDark) EmeraldPrimary else Color(0xFF047857),
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-}

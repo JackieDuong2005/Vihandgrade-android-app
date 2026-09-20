@@ -399,34 +399,45 @@ class GradeRepository(
 
     suspend fun syncAllGradesToServer(serverUrl: String): Pair<Int, Int> = withContext(Dispatchers.IO) {
         val records = dao.getAllRecordsList()
+        if (records.isEmpty()) {
+            return@withContext Pair(0, 0)
+        }
         var successCount = 0
         var failCount = 0
         val api = NetworkClient.createService(serverUrl)
 
         records.forEach { rec ->
             try {
-                val scoreStr = "${String.format(java.util.Locale.US, "%.1f", rec.totalScore)}/10"
+                val scoreVal = if (rec.totalScore > 0) rec.totalScore else 0.0f
+                val scoreStr = "${String.format(java.util.Locale.US, "%.1f", scoreVal)}/10"
                 val breakdownJson = "{\"spelling\":${rec.spellingScore},\"format\":${rec.formatScore},\"content\":${rec.contentScore},\"creativity\":${rec.creativityScore}}"
+                val textContent = rec.extractedText.ifBlank {
+                    rec.correctedFullText.ifBlank {
+                        rec.essayTitle.ifBlank { "Bài làm học sinh" }
+                    }
+                }
                 val req = ServerGradeSyncRequest(
                     gradingMode = "dictation",
-                    studentName = rec.studentName,
-                    assignmentTitle = rec.essayTitle,
-                    className = rec.className,
-                    originalText = rec.extractedText.ifBlank { rec.correctedFullText },
-                    fixedText = rec.correctedFullText,
+                    studentName = rec.studentName.ifBlank { "Học sinh" },
+                    assignmentTitle = rec.essayTitle.ifBlank { "Bài viết chính tả" },
+                    className = rec.className.ifBlank { "" },
+                    originalText = textContent,
+                    fixedText = rec.correctedFullText.ifBlank { textContent },
                     score = scoreStr,
                     scoreBreakdown = breakdownJson,
-                    corrections = rec.errorsJson,
-                    pedagogicalComment = rec.pedagogicalComment,
-                    feedback = rec.pedagogicalComment
+                    corrections = rec.errorsJson.ifBlank { "[]" },
+                    pedagogicalComment = rec.pedagogicalComment.ifBlank { "Đã chấm điểm thành công" },
+                    feedback = rec.pedagogicalComment.ifBlank { "Đã chấm điểm thành công" }
                 )
                 val response = api.syncGrade(req)
                 if (response.isSuccessful) {
                     successCount++
                 } else {
+                    android.util.Log.e("GradeRepository", "Lỗi đồng bộ [${rec.studentName}]: HTTP ${response.code()} - ${response.errorBody()?.string()}")
                     failCount++
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.e("GradeRepository", "Ngoại lệ khi đồng bộ [${rec.studentName}]: ${e.message}")
                 failCount++
             }
         }
