@@ -101,6 +101,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             fetchClassesAndStudents()
             fetchServerGrades()
+            // Tự động kéo các bài chấm mới nhất từ server về lưu Room DB khi mở app:
+            try {
+                repository.syncTwoWayWithServer(_serverUrl.value)
+            } catch (_: Exception) {}
         }
     }
 
@@ -146,19 +150,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun syncAllGradesToServer() {
         viewModelScope.launch {
             _isSyncing.value = true
-            _syncStatus.value = Pair(null, "Đang đồng bộ sổ điểm lên máy chủ...")
+            _syncStatus.value = Pair(null, "Đang đồng bộ sổ điểm hai chiều với máy chủ...")
             try {
-                val (success, fail) = repository.syncAllGradesToServer(_serverUrl.value)
+                val (uploaded, failed, downloaded) = repository.syncTwoWayWithServer(_serverUrl.value)
                 _isSyncing.value = false
-                if (fail == 0 && success > 0) {
-                    _syncStatus.value = Pair(true, "Đã đồng bộ thành công $success bài chấm về trường!")
-                    fetchServerGrades()
-                } else if (success > 0) {
-                    _syncStatus.value = Pair(true, "Đã gửi $success bài, lỗi $fail bài.")
-                    fetchServerGrades()
-                } else {
-                    _syncStatus.value = Pair(false, "Không có bài cần gửi hoặc kết nối máy chủ gián đoạn.")
+                val msg = buildString {
+                    if (uploaded > 0) append("Đã gửi $uploaded bài lên server. ")
+                    if (downloaded > 0) append("Đã tải $downloaded bài từ server về máy. ")
+                    if (failed > 0) append("Lỗi gửi $failed bài. ")
+                    if (uploaded == 0 && downloaded == 0 && failed == 0) {
+                        append("Sổ điểm đã đồng bộ hoàn toàn với máy chủ!")
+                    }
                 }
+                _syncStatus.value = Pair(failed == 0, msg.trim())
+                fetchServerGrades()
             } catch (e: Exception) {
                 _isSyncing.value = false
                 _syncStatus.value = Pair(false, "Lỗi đồng bộ: ${e.localizedMessage}")

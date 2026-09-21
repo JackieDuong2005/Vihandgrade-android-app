@@ -485,6 +485,33 @@ class GradeRepository(
         }
     }
 
+    /**
+     * Đồng bộ hai chiều toàn diện giữa điện thoại và máy chủ ViHand Grade:
+     * - Bước 1: Gửi các bài chấm offline lưu trên điện thoại lên cơ sở dữ liệu server
+     * - Bước 2: Kéo toàn bộ bài chấm từ server về và lưu vào Room Database trên máy
+     * Trả về: Triple(số bài tải lên thành công, số bài tải lên thất bại, số bài mới tải từ server về)
+     */
+    suspend fun syncTwoWayWithServer(serverUrl: String): Triple<Int, Int, Int> = withContext(Dispatchers.IO) {
+        // 1. Đẩy các bài offline nội bộ lên máy chủ
+        val (uploadedSuccess, uploadedFail) = syncAllGradesToServer(serverUrl)
+
+        // 2. Tải toàn bộ bài chấm từ máy chủ về lưu vào Room DB nội bộ
+        val serverGrades = fetchGradesFromServer(serverUrl)
+        var downloadedCount = 0
+        if (serverGrades.isNotEmpty()) {
+            val localRecords = dao.getAllRecordsList()
+            val existingKeys = localRecords.map { "${it.studentName.trim()}_${it.essayTitle.trim()}_${it.className.trim()}" }.toSet()
+            serverGrades.forEach { sGrade ->
+                val key = "${sGrade.studentName.trim()}_${sGrade.essayTitle.trim()}_${sGrade.className.trim()}"
+                if (key !in existingKeys) {
+                    saveRecord(sGrade)
+                    downloadedCount++
+                }
+            }
+        }
+        Triple(uploadedSuccess, uploadedFail, downloadedCount)
+    }
+
     private data class GradeBreakdown(val spelling: Float, val format: Float, val content: Float, val creativity: Float)
 
     private fun parseScoreBreakdown(json: String?): GradeBreakdown {
