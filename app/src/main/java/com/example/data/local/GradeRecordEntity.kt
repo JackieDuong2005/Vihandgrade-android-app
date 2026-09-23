@@ -21,5 +21,6 @@ data class GradeRecordEntity(
     val correctedFullText: String,
     val errorsJson: String,
     val serverSource: String,
-    val sampleType: String? = null
+    val sampleType: String? = null,
+    val photoPath: String? = null
 )

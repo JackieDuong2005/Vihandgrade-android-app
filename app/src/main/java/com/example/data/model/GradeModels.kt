@@ -58,6 +58,8 @@ data class GradeResult(
     val serverSource: String = "Raspberry Pi Server (Cloudflare)",
     val sampleImageResId: Int? = null,
     val photoPath: String? = null,
+    val photoBitmap: android.graphics.Bitmap? = null,
+    val imageUrl: String? = null,
     val isSample: Boolean = false,
     val sampleType: String? = null
 )

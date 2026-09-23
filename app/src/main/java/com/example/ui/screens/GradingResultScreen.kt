@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -104,8 +105,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.ErrorBox
 import com.example.data.model.GradeResult
-import com.example.ui.components.HandwritingCanvas
-import com.example.ui.components.NotebookBackground
+import com.example.ui.components.PhotoBoundingBoxViewer
+import com.example.ui.components.getErrorCategoryColor
 import com.example.ui.theme.AccentAmber
 import com.example.ui.theme.AccentCoral
 import com.example.ui.theme.AccentIndigo
@@ -133,9 +134,25 @@ fun GradingResultScreen(
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val clipboardManager = LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
 
-    var activeTabMode by remember { mutableStateOf("canvas") } // "canvas", "diff", "skills"
-    var canvasSubMode by remember { mutableStateOf("notebook") } // "notebook", "photo"
+    // TextToSpeech for Vietnamese pronunciation of corrected words
+    var ttsInstance by remember { mutableStateOf<android.speech.tts.TextToSpeech?>(null) }
+    androidx.compose.runtime.DisposableEffect(context) {
+        lateinit var tts: android.speech.tts.TextToSpeech
+        tts = android.speech.tts.TextToSpeech(context) { status ->
+            if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                tts.language = java.util.Locale("vi", "VN")
+            }
+        }
+        ttsInstance = tts
+        onDispose {
+            tts.stop()
+            tts.shutdown()
+        }
+    }
+
+    var activeTabMode by remember { mutableStateOf("canvas") } // "canvas" (photo + bbox), "diff", "skills"
     var showCertificateDialog by remember { mutableStateOf(false) }
     var showAddErrorDialog by remember { mutableStateOf(false) }
 
@@ -277,17 +294,14 @@ fun GradingResultScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier.fillMaxSize()
     ) { innerPadding ->
-        NotebookBackground(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .background(AppTheme.colors.background)
                 .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
 
 
             // Processing server badge
@@ -320,7 +334,7 @@ fun GradingResultScreen(
                 }
             }
 
-            // 3-Mode Inspection Segmented Bar: "Vở Ô Ly", "So Sánh Sửa", "4 Năng Lực"
+            // 3-Mode Inspection Segmented Bar: "Ảnh Thật & BBox", "So Sánh Sửa", "4 Năng Lực"
             item {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
@@ -335,7 +349,7 @@ fun GradingResultScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         val tabs = listOf(
-                            Triple("canvas", "Vở Ô Ly", Icons.Default.Edit),
+                            Triple("canvas", "Ảnh Thật & BBox", Icons.Default.CameraAlt),
                             Triple("diff", "So Sánh Sửa", Icons.Default.MenuBook),
                             Triple("skills", "4 Năng Lực", Icons.Default.School)
                         )
@@ -378,111 +392,22 @@ fun GradingResultScreen(
                 }
             }
 
-            // MODE 1: Interactive Canvas & Error Popover
+            // MODE 1: Interactive Real Photo with YOLOv8 Bounding Box Overlay
             if (activeTabMode == "canvas") {
                 item {
                     Column {
-                        // Sub-mode segmented switcher: Vở ô ly vs Ảnh chụp gốc
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = AppTheme.colors.cardElevated,
-                            border = BorderStroke(1.dp, AppTheme.colors.border),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(3.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (canvasSubMode == "notebook") (if (isDarkTheme) EmeraldPrimary else Color(0xFF059669)) else Color.Transparent,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable {
-                                            canvasSubMode = "notebook"
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        }
-                                        .testTag("submode_notebook_btn")
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(vertical = 6.dp),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.MenuBook,
-                                            contentDescription = null,
-                                            tint = if (canvasSubMode == "notebook") (if (isDarkTheme) Color(0xFF064E3B) else Color.White) else AppTheme.colors.textMuted,
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "Vở Ô Ly 4 Ly (Kính Lúp)",
-                                            fontSize = 11.sp,
-                                            fontWeight = if (canvasSubMode == "notebook") FontWeight.Bold else FontWeight.Medium,
-                                            color = if (canvasSubMode == "notebook") (if (isDarkTheme) Color(0xFF064E3B) else Color.White) else AppTheme.colors.textSecondary
-                                        )
-                                    }
-                                }
+                        // Real Photo with YOLOv8 BBox Viewer
+                        PhotoBoundingBoxViewer(
+                            result = updatedResult,
+                            selectedErrorId = selectedErrorId,
+                            onSelectError = { err ->
+                                onSelectError(err.id)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            },
+                            isDarkTheme = isDarkTheme
+                        )
 
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (canvasSubMode == "photo") (if (isDarkTheme) EmeraldPrimary else Color(0xFF059669)) else Color.Transparent,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable {
-                                            canvasSubMode = "photo"
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        }
-                                        .testTag("submode_photo_btn")
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(vertical = 6.dp),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CameraAlt,
-                                            contentDescription = null,
-                                            tint = if (canvasSubMode == "photo") (if (isDarkTheme) Color(0xFF064E3B) else Color.White) else AppTheme.colors.textMuted,
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "Ảnh Chụp Bài (YOLOv8)",
-                                            fontSize = 11.sp,
-                                            fontWeight = if (canvasSubMode == "photo") FontWeight.Bold else FontWeight.Medium,
-                                            color = if (canvasSubMode == "photo") (if (isDarkTheme) Color(0xFF064E3B) else Color.White) else AppTheme.colors.textSecondary
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        if (canvasSubMode == "notebook") {
-                            HandwritingCanvas(
-                                result = updatedResult,
-                                selectedErrorId = selectedErrorId,
-                                onSelectError = { err ->
-                                    onSelectError(err.id)
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                }
-                            )
-                        } else {
-                            OriginalPhotoBBoxView(
-                                result = updatedResult,
-                                selectedErrorId = selectedErrorId,
-                                onSelectError = { err: com.example.data.model.ErrorBox ->
-                                    onSelectError(err.id)
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                },
-                                isDarkTheme = isDarkTheme
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // Canvas Hint
                         Row(
@@ -498,7 +423,7 @@ fun GradingResultScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Chạm vào khung đỏ để sửa hoặc bấm nút bên dưới",
+                                text = "Chạm vào ô lỗi trên ảnh chụp để nghe phát âm và đối chiếu",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isDarkTheme) EmeraldLight else Color(0xFF047857),
                                 fontWeight = FontWeight.Medium
@@ -677,6 +602,25 @@ fun GradingResultScreen(
                                             color = EmeraldPrimary,
                                             fontWeight = FontWeight.Black
                                         )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        IconButton(
+                                            onClick = {
+                                                ttsInstance?.speak(
+                                                    selectedError.correctedWord,
+                                                    android.speech.tts.TextToSpeech.QUEUE_FLUSH,
+                                                    null,
+                                                    "err_${selectedError.id}"
+                                                )
+                                            },
+                                            modifier = Modifier.size(26.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.VolumeUp,
+                                                contentDescription = "Nghe phát âm chuẩn",
+                                                tint = EmeraldPrimary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
                                         Spacer(modifier = Modifier.weight(1f))
                                         Text(
                                             text = "${selectedError.penalty}đ",
@@ -1206,7 +1150,6 @@ fun GradingResultScreen(
             item {
                 Spacer(modifier = Modifier.height(48.dp))
             }
-        }
         }
 
         // Dialog for adding manual error
@@ -2188,151 +2131,6 @@ private fun TeacherScoreSliderRow(
             ),
             modifier = Modifier.height(28.dp)
         )
-    }
-}
-
-/**
- * Original photo background with YOLOv8 Bounding Boxes overlay
- */
-@Composable
-private fun OriginalPhotoBBoxView(
-    result: GradeResult,
-    selectedErrorId: String?,
-    onSelectError: (com.example.data.model.ErrorBox) -> Unit,
-    isDarkTheme: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(340.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isDarkTheme) Color(0xFF0F172A) else Color(0xFFF8FAFC)
-        ),
-        border = BorderStroke(1.dp, AppTheme.colors.border)
-    ) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val canvasW = maxWidth
-            val canvasH = maxHeight
-
-            // Background canvas simulating paper texture with actual lines
-            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                val w = size.width
-                val h = size.height
-
-                // Paper background tint
-                drawRect(
-                    color = if (isDarkTheme) Color(0xFF1E293B) else Color(0xFFFEFDF9),
-                    size = size
-                )
-
-                // Simulated notebook faint grid lines in original photo
-                val stepY = h / 16f
-                for (i in 1..15) {
-                    val y = i * stepY
-                    drawLine(
-                        color = if (isDarkTheme) Color(0xFF334155).copy(alpha = 0.4f) else Color(0xFFE2E8F0),
-                        start = Offset(0f, y),
-                        end = Offset(w, y),
-                        strokeWidth = 1f
-                    )
-                }
-            }
-
-            // Student handwritten text layout preview
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = Color(0xFF059669).copy(alpha = 0.15f)
-                    ) {
-                        Text(
-                            text = "YOLOv8 DETECTED • ${result.errors.size} VÙNG LỖI",
-                            color = if (isDarkTheme) EmeraldLight else Color(0xFF047857),
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-
-                    Text(
-                        text = "Ảnh thực tế học sinh",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AppTheme.colors.textMuted,
-                        fontSize = 10.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Render student essay lines in simulated handwriting font/style
-                Text(
-                    text = result.extractedText,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                        letterSpacing = 0.8.sp,
-                        lineHeight = 24.sp
-                    ),
-                    color = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B)
-                )
-            }
-
-            // Bounding Box Overlays
-            result.errors.forEach { err ->
-                val isSelected = err.id == selectedErrorId
-                val boxColor = when (err.errorType.lowercase()) {
-                    "spelling", "chính tả" -> AccentCoral
-                    "diacritic", "dấu thanh", "format" -> AccentAmber
-                    "punctuation", "dấu câu" -> AccentSky
-                    else -> Color(0xFF8B5CF6)
-                }
-
-                val leftDp = canvasW * err.rel_x1
-                val topDp = canvasH * err.rel_y1
-                val widthDp = (canvasW * err.rel_w).coerceAtLeast(36.dp)
-                val heightDp = (canvasH * err.rel_h).coerceAtLeast(24.dp)
-
-                Box(
-                    modifier = Modifier
-                        .offset(x = leftDp, y = topDp)
-                        .size(width = widthDp, height = heightDp)
-                        .border(
-                            width = if (isSelected) 2.5.dp else 1.5.dp,
-                            color = if (isSelected) Color(0xFFDC2626) else boxColor,
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                        .background(
-                            (if (isSelected) Color(0xFFDC2626) else boxColor).copy(alpha = if (isSelected) 0.30f else 0.12f),
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                        .clickable { onSelectError(err) }
-                ) {
-                    // Small floating badge with error word & correction
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = if (isSelected) Color(0xFFDC2626) else boxColor,
-                        modifier = Modifier.align(Alignment.TopStart).offset(y = (-14).dp)
-                    ) {
-                        Text(
-                            text = "${err.originalWord} → ${err.correctedWord}",
-                            color = Color.White,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 

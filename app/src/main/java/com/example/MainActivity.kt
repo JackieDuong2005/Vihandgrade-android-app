@@ -151,6 +151,14 @@ fun ViHandGradeApp(
     val studentList by viewModel.studentList.collectAsStateWithLifecycle()
     val serverGrades by viewModel.serverGradesList.collectAsStateWithLifecycle()
 
+    val schoolName by viewModel.schoolName.collectAsStateWithLifecycle()
+    val penaltyPerError by viewModel.penaltyPerError.collectAsStateWithLifecycle()
+    val autoEncouragement by viewModel.autoEncouragement.collectAsStateWithLifecycle()
+    val autoBoundingBox by viewModel.autoBoundingBox.collectAsStateWithLifecycle()
+    val ttsVoice by viewModel.ttsVoice.collectAsStateWithLifecycle()
+    val ttsSpeed by viewModel.ttsSpeed.collectAsStateWithLifecycle()
+    val photoCacheSizeBytes by viewModel.photoCacheSizeBytes.collectAsStateWithLifecycle()
+
     // 5 Screen tabs matching the HTML Mockup: "home" (default), "grade", "camera", "dictation", "settings"
     var activeTab by remember { mutableStateOf("home") }
 
@@ -246,10 +254,10 @@ fun ViHandGradeApp(
                             testTag = "nav_dictation"
                         )
 
-                        // Tab 5: Trạm Pi
+                        // Tab 5: Cài đặt
                         BottomNavTabItem(
-                            icon = Icons.Default.Dns,
-                            label = "Trạm Pi",
+                            icon = Icons.Default.Settings,
+                            label = "Cài đặt",
                             isSelected = activeTab == "settings",
                             onClick = { activeTab = "settings" },
                             testTag = "nav_settings"
@@ -374,11 +382,25 @@ fun ViHandGradeApp(
                             syncStatus = syncStatus,
                             isSyncing = isSyncing,
                             localRecordsCount = historyList.size,
+                            photoCacheSizeBytes = photoCacheSizeBytes,
+                            schoolName = schoolName,
+                            penaltyPerError = penaltyPerError,
+                            autoEncouragement = autoEncouragement,
+                            autoBoundingBox = autoBoundingBox,
+                            ttsVoice = ttsVoice,
+                            ttsSpeed = ttsSpeed,
                             onSaveUrl = { newUrl -> viewModel.updateServerUrl(newUrl) },
                             onPing = { viewModel.testConnection() },
                             onSyncGrades = { viewModel.syncAllGradesToServer() },
                             onRefreshClassesAndStudents = { viewModel.fetchClassesAndStudents() },
                             onClearLocalRecords = { viewModel.clearAllRecords() },
+                            onClearPhotoCache = { viewModel.clearPhotoCache() },
+                            onUpdateSchoolName = { viewModel.updateSchoolName(it) },
+                            onUpdatePenaltyPerError = { viewModel.updatePenaltyPerError(it) },
+                            onUpdateAutoEncouragement = { viewModel.updateAutoEncouragement(it) },
+                            onUpdateAutoBoundingBox = { viewModel.updateAutoBoundingBox(it) },
+                            onUpdateTtsVoice = { viewModel.updateTtsVoice(it) },
+                            onUpdateTtsSpeed = { viewModel.updateTtsSpeed(it) },
                             currentUser = currentUser,
                             onLogout = { viewModel.logout() },
                             isDarkTheme = isDarkTheme,
@@ -527,15 +549,28 @@ fun ViHandGradeApp(
                         }
                     },
                     confirmButton = {
-                        Button(
-                            onClick = {
-                                viewModel.resetGradingState()
-                                activeTab = "settings"
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Đến Cài Đặt IP", fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    viewModel.retryOfflineSimulation()
+                                    activeTab = "grade"
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Chấm Offline 🧪", fontWeight = FontWeight.Bold, color = Color(0xFF064E3B))
+                            }
+                            Button(
+                                onClick = {
+                                    viewModel.resetGradingState()
+                                    activeTab = "settings"
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = AppTheme.colors.card),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Đến Cài Đặt", color = AppTheme.colors.textPrimary, fontWeight = FontWeight.Bold)
+                            }
                         }
                     },
                     dismissButton = {

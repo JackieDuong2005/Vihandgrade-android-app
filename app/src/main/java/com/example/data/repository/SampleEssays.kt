@@ -264,5 +264,146 @@ Ru bà ngủ say,
         sampleType = "spelling_demo"
     )
 
-    val allSamples = listOf(sample2Good, sample1Eureka, sample3Spelling, sample2Excellence, sample3DialectMistakes)
+    val sampleTayMe = GradeResult(
+        id = "sample_tay_me",
+        timestamp = System.currentTimeMillis(),
+        studentName = "Lê Hoàng Phúc",
+        className = "Lớp 2A3 - Tiểu học Chu Văn An",
+        essayTitle = "Chính tả (Tập chép): Gió từ tay mẹ",
+        criteria = GradeCriteria(
+            spellingScore = 1.5f,
+            formatScore = 2.5f,
+            contentScore = 2.0f,
+            creativityScore = 0.5f,
+            totalScore = 6.5f
+        ),
+        pedagogicalComment = "Em viết bài nắn nót, đúng độ cao ô ly và chép đủ 4 dòng thơ. Tuy nhiên em mắc một số lỗi chính tả do phát âm địa phương: 'Gó' (viết đúng là 'Gió'), 'su' ('ru'), 'xay' ('say'), 'sá xời' ('gió trời'), 'chưa' ('trưa'). Cô động viên em luyện đọc phân biệt âm s/r và ch/tr để bài sau đạt điểm 9, 10 nhé!",
+        pedagogicalComments = listOf(
+            "Em viết bài nắn nót, đúng độ cao ô ly. Cần chú ý phân biệt âm đầu s/r (su bé -> ru bé) và ch/tr (chưa -> trưa).",
+            "Cô khen Phúc đã hoàn thành đủ 4 câu thơ. Em nhớ đọc lại bài thật kỹ để sửa lỗi thiếu chữ 'i' trong tiếng 'Gió' nhé!",
+            "Chữ viết nét đều, giữ lề vở tốt. Chỉ cần khắc phục các lỗi lẫn lộn âm đầu địa phương là bài thi sẽ rất tuyệt vời!"
+        ),
+        extractedText = """
+Gó từ tay mẹ
+su bé ngủ xay
+thay cho sá xời
+Giữa chưa oi ải
+""".trimIndent(),
+        correctedFullText = """
+Gió từ tay mẹ
+ru bé ngủ say
+thay cho gió trời
+Giữa trưa oi ả
+""".trimIndent(),
+        errors = listOf(
+            ErrorBox(
+                id = "err_tm_1",
+                originalWord = "Gó",
+                correctedWord = "Gió",
+                errorType = "Thiếu âm / Nguyên âm (Gó -> Gió)",
+                explanation = "Quy tắc chính tả: Tiếng 'Gió' có âm đầu gi và âm chính o, không viết thiếu 'i' thành 'Gó'.",
+                penalty = -0.5f,
+                x1 = 0.20f,
+                y1 = 0.05f,
+                x2 = 0.36f,
+                y2 = 0.24f,
+                lineNumber = 1,
+                rel_x1 = 0.20f,
+                rel_y1 = 0.05f,
+                rel_w = 0.16f,
+                rel_h = 0.20f
+            ),
+            ErrorBox(
+                id = "err_tm_2",
+                originalWord = "su",
+                correctedWord = "ru",
+                errorType = "Phụ âm đầu (s/r)",
+                explanation = "Lẫn lộn âm s/r do phát âm địa phương: 'Ru em', 'ru ngủ' viết bằng âm đầu 'r', không viết 'su'.",
+                penalty = -0.5f,
+                x1 = 0.18f,
+                y1 = 0.26f,
+                x2 = 0.32f,
+                y2 = 0.44f,
+                lineNumber = 2,
+                rel_x1 = 0.18f,
+                rel_y1 = 0.26f,
+                rel_w = 0.14f,
+                rel_h = 0.18f
+            ),
+            ErrorBox(
+                id = "err_tm_3",
+                originalWord = "xay",
+                correctedWord = "say",
+                errorType = "Phụ âm đầu (x/s)",
+                explanation = "Phân biệt s/x: 'Ngủ say', 'say sưa' viết bằng 's' nhẹ; 'xay xát', 'xay lúa' viết bằng 'x'.",
+                penalty = -0.5f,
+                x1 = 0.65f,
+                y1 = 0.29f,
+                x2 = 0.83f,
+                y2 = 0.47f,
+                lineNumber = 2,
+                rel_x1 = 0.65f,
+                rel_y1 = 0.29f,
+                rel_w = 0.18f,
+                rel_h = 0.18f
+            ),
+            ErrorBox(
+                id = "err_tm_4",
+                originalWord = "sá xời",
+                correctedWord = "gió trời",
+                errorType = "Phụ âm đầu & Vần (sá xời -> gió trời)",
+                explanation = "Bé viết nhầm phụ âm địa phương: 'Gió trời' trong bài thơ bị viết lệch thành 'sá xời'.",
+                penalty = -0.5f,
+                x1 = 0.58f,
+                y1 = 0.50f,
+                x2 = 0.88f,
+                y2 = 0.70f,
+                lineNumber = 3,
+                rel_x1 = 0.58f,
+                rel_y1 = 0.50f,
+                rel_w = 0.30f,
+                rel_h = 0.20f
+            ),
+            ErrorBox(
+                id = "err_tm_5",
+                originalWord = "chưa",
+                correctedWord = "trưa",
+                errorType = "Phụ âm đầu (ch/tr)",
+                explanation = "Phân biệt ch/tr: 'Giữa trưa', 'buổi trưa' chỉ thời gian viết bằng âm đầu 'tr'; 'chưa xong' mới viết 'ch'.",
+                penalty = -0.5f,
+                x1 = 0.41f,
+                y1 = 0.74f,
+                x2 = 0.62f,
+                y2 = 0.94f,
+                lineNumber = 4,
+                rel_x1 = 0.41f,
+                rel_y1 = 0.74f,
+                rel_w = 0.21f,
+                rel_h = 0.20f
+            ),
+            ErrorBox(
+                id = "err_tm_6",
+                originalWord = "oi ải",
+                correctedWord = "oi ả",
+                errorType = "Dấu thanh & Vần (oi ải -> oi ả)",
+                explanation = "Từ láy mô tả thời tiết ngột ngạt mùa hè là 'oi ả', không viết thêm chữ i/dấu hỏi thành 'oi ải'.",
+                penalty = -0.5f,
+                x1 = 0.77f,
+                y1 = 0.75f,
+                x2 = 0.92f,
+                y2 = 0.94f,
+                lineNumber = 4,
+                rel_x1 = 0.77f,
+                rel_y1 = 0.75f,
+                rel_w = 0.15f,
+                rel_h = 0.19f
+            )
+        ),
+        processingTimeMs = 1120L,
+        serverSource = "ViHand AI Studio Engine (YOLOv8 + ViT5)",
+        isSample = true,
+        sampleType = "tay_me_demo"
+    )
+
+    val allSamples = listOf(sampleTayMe, sample2Good, sample1Eureka, sample3Spelling, sample2Excellence, sample3DialectMistakes)
 }

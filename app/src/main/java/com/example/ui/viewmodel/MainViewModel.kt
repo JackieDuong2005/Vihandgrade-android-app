@@ -188,12 +188,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _isDarkTheme.value = dark
     }
 
+    private var lastAttemptedBitmap: Bitmap? = null
+
+    fun retryOfflineSimulation() {
+        val bmp = lastAttemptedBitmap
+        val offlineResult = SampleEssays.sampleTayMe.copy(
+            id = java.util.UUID.randomUUID().toString(),
+            timestamp = System.currentTimeMillis(),
+            photoBitmap = bmp,
+            serverSource = "Chế độ Mô phỏng Sư phạm Ngoại tuyến (Offline Demo)",
+            isSample = true
+        )
+        _currentResult.value = offlineResult
+        _selectedErrorId.value = offlineResult.errors.firstOrNull()?.id
+        _gradingState.value = GradingUiState.Success(offlineResult)
+    }
+
     fun gradeBitmap(
         bitmap: Bitmap,
         studentGrade: Int = 3,
         studentName: String = _selectedStudent.value,
         className: String = _selectedClass.value
     ) {
+        lastAttemptedBitmap = bitmap
         viewModelScope.launch {
             _gradingState.value = GradingUiState.Processing("1/4. Tiền xử lý ảnh: Khử bóng, cân bằng trắng CLAHE...", 0.25f)
             delay(150)
@@ -383,5 +400,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             fetchServerGrades()
         }
+    }
+
+    // ==========================================
+    // PEDAGOGICAL & APP SETTINGS (THÔNG TƯ 27)
+    // ==========================================
+    private val _schoolName = MutableStateFlow<String>(sessionManager.getSchoolName())
+    val schoolName: StateFlow<String> = _schoolName.asStateFlow()
+
+    private val _penaltyPerError = MutableStateFlow<Float>(sessionManager.getPenaltyPerError())
+    val penaltyPerError: StateFlow<Float> = _penaltyPerError.asStateFlow()
+
+    private val _autoEncouragement = MutableStateFlow<Boolean>(sessionManager.isAutoEncouragement())
+    val autoEncouragement: StateFlow<Boolean> = _autoEncouragement.asStateFlow()
+
+    private val _autoBoundingBox = MutableStateFlow<Boolean>(sessionManager.isAutoBoundingBox())
+    val autoBoundingBox: StateFlow<Boolean> = _autoBoundingBox.asStateFlow()
+
+    private val _ttsVoice = MutableStateFlow<String>(sessionManager.getTtsVoice())
+    val ttsVoice: StateFlow<String> = _ttsVoice.asStateFlow()
+
+    private val _ttsSpeed = MutableStateFlow<Float>(sessionManager.getTtsSpeed())
+    val ttsSpeed: StateFlow<Float> = _ttsSpeed.asStateFlow()
+
+    private val _photoCacheSizeBytes = MutableStateFlow<Long>(repository.getCacheDirectorySizeBytes())
+    val photoCacheSizeBytes: StateFlow<Long> = _photoCacheSizeBytes.asStateFlow()
+
+    fun updateSchoolName(name: String) {
+        sessionManager.setSchoolName(name)
+        _schoolName.value = name
+    }
+
+    fun updatePenaltyPerError(penalty: Float) {
+        sessionManager.setPenaltyPerError(penalty)
+        _penaltyPerError.value = penalty
+    }
+
+    fun updateAutoEncouragement(enabled: Boolean) {
+        sessionManager.setAutoEncouragement(enabled)
+        _autoEncouragement.value = enabled
+    }
+
+    fun updateAutoBoundingBox(enabled: Boolean) {
+        sessionManager.setAutoBoundingBox(enabled)
+        _autoBoundingBox.value = enabled
+    }
+
+    fun updateTtsVoice(voice: String) {
+        sessionManager.setTtsVoice(voice)
+        _ttsVoice.value = voice
+    }
+
+    fun updateTtsSpeed(speed: Float) {
+        sessionManager.setTtsSpeed(speed)
+        _ttsSpeed.value = speed
+    }
+
+    fun clearPhotoCache() {
+        viewModelScope.launch {
+            repository.clearPhotoCache()
+            _photoCacheSizeBytes.value = repository.getCacheDirectorySizeBytes()
+        }
+    }
+
+    fun refreshCacheSize() {
+        _photoCacheSizeBytes.value = repository.getCacheDirectorySizeBytes()
     }
 }

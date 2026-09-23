@@ -125,6 +125,18 @@ private data class SamplePaperData(
 
 private val samplePapers = listOf(
     SamplePaperData(
+        id = "paper_tay_me",
+        title = "Gió từ tay mẹ (Chữ viết tay thực tế)",
+        subtitle = "Tiếng Việt Lớp 2 • Tập chép chính tả",
+        note = "Mẫu thực tế: Có 6 lỗi sai phụ âm & vần địa phương (Gó/Gió, su/ru, xay/say...)",
+        lines = listOf(
+            "Gó từ tay mẹ",
+            "su bé ngủ xay",
+            "thay cho sá xời",
+            "Giữa chưa oi ải"
+        )
+    ),
+    SamplePaperData(
         id = "paper_1",
         title = "Quạt cho bà ngủ",
         subtitle = "Tiếng Việt Lớp 3 • Tập chép chính tả",

@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 
 // Định nghĩa ngoại lệ chuyên dụng khi giao tiếp máy chủ chấm bài
@@ -46,6 +48,47 @@ class GradeRepository(
         entities.map { it.toModel() }
     }
 
+    fun saveBitmapToInternalCache(bitmap: Bitmap): String {
+        return try {
+            val cacheDir = File(context.filesDir, "grades").apply { if (!exists()) mkdirs() }
+            val file = File(cacheDir, "grade_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}.jpg")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            android.util.Log.e("GradeRepository", "Lỗi lưu ảnh cache: ${e.message}")
+            ""
+        }
+    }
+
+    fun getCacheDirectorySizeBytes(): Long {
+        return try {
+            val cacheDir = File(context.filesDir, "grades")
+            if (cacheDir.exists()) {
+                cacheDir.walkTopDown().filter { it.isFile }.map { it.length() }.sum()
+            } else 0L
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    fun clearPhotoCache(): Int {
+        return try {
+            val cacheDir = File(context.filesDir, "grades")
+            if (cacheDir.exists()) {
+                val files = cacheDir.listFiles() ?: emptyArray()
+                var count = 0
+                files.forEach {
+                    if (it.delete()) count++
+                }
+                count
+            } else 0
+        } catch (_: Exception) {
+            0
+        }
+    }
+
     suspend fun gradeImage(
         bitmap: Bitmap,
         serverUrl: String = NetworkClient.DEFAULT_BASE_URL,
@@ -53,9 +96,11 @@ class GradeRepository(
         essayType: String = "spelling",
         gradingMode: String = "dictation",
         studentName: String = "Học sinh",
-        className: String = ""
+        className: String = "",
+        penaltyPerError: Float = 0.5f
     ): GradeResult = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
+        val cachedPhotoPath = saveBitmapToInternalCache(bitmap).ifEmpty { null }
         val imageBase64 = encodeBitmapToBase64(bitmap)
         val effectiveClassName = className.ifBlank { "Lớp ${studentGrade}A" }
 
@@ -73,7 +118,8 @@ class GradeRepository(
                     gradingMode = gradingMode,
                     studentName = studentName,
                     className = effectiveClassName,
-                    essayType = essayType
+                    essayType = essayType,
+                    penaltyPerError = penaltyPerError
                 )
             )
         } catch (e: Exception) {
@@ -143,7 +189,9 @@ class GradeRepository(
             correctedFullText = body.correctedFullText ?: "",
             errors = errors,
             processingTimeMs = body.processingTimeMs ?: (System.currentTimeMillis() - startTime),
-            serverSource = body.serverSource ?: "ViHand Grade Server (vihand.db)"
+            serverSource = body.serverSource ?: "ViHand Grade Server (vihand.db)",
+            photoPath = cachedPhotoPath,
+            photoBitmap = bitmap
         )
 
         // Lưu vào Room DB làm bản sao lưu đệm cục bộ (Local Cache)
@@ -172,7 +220,8 @@ class GradeRepository(
             correctedFullText = result.correctedFullText,
             errorsJson = errorsAdapter.toJson(result.errors),
             serverSource = result.serverSource,
-            sampleType = result.sampleType
+            sampleType = result.sampleType,
+            photoPath = result.photoPath
         )
         dao.insertRecord(entity)
     }
@@ -316,7 +365,8 @@ class GradeRepository(
             errors = errorsList,
             processingTimeMs = 1100L,
             serverSource = serverSource,
-            sampleType = sampleType
+            sampleType = sampleType,
+            photoPath = photoPath
         )
     }
 
