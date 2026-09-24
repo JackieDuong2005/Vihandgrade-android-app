@@ -126,6 +126,7 @@ fun GradingResultScreen(
     onGradeAnother: () -> Unit,
     onToggleTheme: () -> Unit = {},
     isDarkTheme: Boolean = true,
+    isTeacher: Boolean = true,
     onSelectSample: ((GradeResult) -> Unit)? = null,
     onSaveModifiedGrade: ((GradeResult) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -439,35 +440,37 @@ fun GradingResultScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Manual Add Error Button
-                            Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = if (isDarkTheme) Color(0xFF1E293B) else Color(0xFFEFF6FF),
-                                border = BorderStroke(1.dp, if (isDarkTheme) Color(0xFF3B82F6) else Color(0xFF60A5FA)),
-                                modifier = Modifier
-                                    .clickable {
-                                        showAddErrorDialog = true
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    }
-                                    .testTag("add_manual_error_btn")
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                            // Manual Add Error Button (Giáo viên mới có quyền thêm lỗi thủ công)
+                            if (isTeacher) {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = if (isDarkTheme) Color(0xFF1E293B) else Color(0xFFEFF6FF),
+                                    border = BorderStroke(1.dp, if (isDarkTheme) Color(0xFF3B82F6) else Color(0xFF60A5FA)),
+                                    modifier = Modifier
+                                        .clickable {
+                                            showAddErrorDialog = true
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        }
+                                        .testTag("add_manual_error_btn")
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = null,
-                                        tint = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "+ Bắt thêm lỗi",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB),
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "+ Bắt thêm lỗi",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (isDarkTheme) Color(0xFF60A5FA) else Color(0xFF2563EB),
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
 
@@ -785,30 +788,32 @@ fun GradingResultScreen(
                                 color = AppTheme.colors.textMuted,
                                 fontSize = 11.sp
                             )
-                            Button(
-                                onClick = { isOverrideOpen = !isOverrideOpen },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isOverrideOpen) (if (isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)) else (if (isDarkTheme) EmeraldPrimary.copy(alpha = 0.2f) else Color(0xFFD1FAE5))
-                                ),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier
-                                    .height(30.dp)
-                                    .testTag("toggle_override_btn")
-                            ) {
-                                Icon(
-                                    imageVector = if (isOverrideOpen) Icons.Default.Check else Icons.Default.Tune,
-                                    contentDescription = null,
-                                    tint = if (isOverrideOpen) AppTheme.colors.textPrimary else (if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)),
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (isOverrideOpen) "Xong" else "Chỉnh điểm",
-                                    color = if (isOverrideOpen) AppTheme.colors.textPrimary else (if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            if (isTeacher) {
+                                Button(
+                                    onClick = { isOverrideOpen = !isOverrideOpen },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isOverrideOpen) (if (isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)) else (if (isDarkTheme) EmeraldPrimary.copy(alpha = 0.2f) else Color(0xFFD1FAE5))
+                                    ),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier
+                                        .height(30.dp)
+                                        .testTag("toggle_override_btn")
+                                ) {
+                                    Icon(
+                                        imageVector = if (isOverrideOpen) Icons.Default.Check else Icons.Default.Tune,
+                                        contentDescription = null,
+                                        tint = if (isOverrideOpen) AppTheme.colors.textPrimary else (if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isOverrideOpen) "Xong" else "Chỉnh điểm",
+                                        color = if (isOverrideOpen) AppTheme.colors.textPrimary else (if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
 
@@ -2014,11 +2019,16 @@ private fun StudentCertificateDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier.weight(1f, fill = false),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
@@ -2026,21 +2036,37 @@ private fun StudentCertificateDialog(
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
+                            val displayCode = if (result.id.length > 12) {
+                                "${result.id.take(6).uppercase()}...${result.id.takeLast(4).uppercase()}"
+                            } else {
+                                result.id.uppercase()
+                            }
                             Text(
-                                text = "Mã tra cứu: VH-${result.id}-2026",
+                                text = "Mã tra cứu: VH-$displayCode-2026",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = AppTheme.colors.textSecondary,
-                                fontSize = 10.5.sp
+                                fontSize = 10.5.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
-                        Text(
-                            text = "QR Báo Điểm",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isDarkTheme) EmeraldLight else Color(0xFF047857),
-                            fontSize = 10.5.sp
-                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = (if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)).copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "QR Báo Điểm",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isDarkTheme) EmeraldLight else Color(0xFF047857),
+                                fontSize = 10.5.sp,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
 

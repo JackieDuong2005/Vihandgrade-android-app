@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -65,12 +66,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isPinging = MutableStateFlow(false)
     val isPinging: StateFlow<Boolean> = _isPinging.asStateFlow()
 
-    val historyRecords: StateFlow<List<GradeResult>> = repository.allGradedRecords
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+    val historyRecords: StateFlow<List<GradeResult>> = combine(
+        repository.allGradedRecords,
+        _currentUser
+    ) { records, user ->
+        if (user != null && user.role == "student") {
+            records.filter { it.studentName.trim().equals(user.name.trim(), ignoreCase = true) }
+        } else {
+            records
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
 
     // Phase 5: Classes, Students & Cloud Sync State
     private val _classList = MutableStateFlow<List<com.example.data.api.ClassItem>>(com.example.data.repository.GradeRepository.defaultClasses)
@@ -99,12 +108,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            fetchClassesAndStudents()
-            fetchServerGrades()
-            // Tự động kéo các bài chấm mới nhất từ server về lưu Room DB khi mở app:
-            try {
-                repository.syncTwoWayWithServer(_serverUrl.value)
-            } catch (_: Exception) {}
+            val user = sessionManager.getUser()
+            if (user != null) {
+                _currentUser.value = user
+                _isLoggedIn.value = true
+                if (user.role == "student") {
+                    _selectedClass.value = user.className ?: ""
+                    _selectedStudent.value = user.name
+                    syncStudentDataFromServer(user)
+                } else {
+                    user.classes?.firstOrNull()?.let { _selectedClass.value = it }
+                    fetchClassesAndStudents()
+                    fetchServerGrades()
+                    try {
+                        repository.syncTwoWayWithServer(_serverUrl.value)
+                    } catch (_: Exception) {}
+                }
+            } else {
+                fetchClassesAndStudents()
+                fetchServerGrades()
+                try {
+                    repository.syncTwoWayWithServer(_serverUrl.value)
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -135,9 +161,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoadingServerGrades.value = true
             try {
-                val list = repository.fetchGradesFromServer(_serverUrl.value, className)
+                val user = _currentUser.value
+                val isStudent = user?.role == "student"
+                val studentFilter = if (isStudent) user?.name else null
+                val classFilter = className ?: (if (isStudent) user?.className else null)
+
+                val list = repository.fetchGradesFromServer(_serverUrl.value, className = classFilter, search = studentFilter)
                 if (list.isNotEmpty()) {
                     _serverGradesList.value = list
+                    // Nếu là học sinh và chưa chọn bài, hiển thị ngay bài mới nhất
+                    if (isStudent && _currentResult.value == null) {
+                        _currentResult.value = list.first()
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MainViewModel", "Lỗi fetchServerGrades: ${e.message}")
@@ -152,7 +187,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isSyncing.value = true
             _syncStatus.value = Pair(null, "Đang đồng bộ sổ điểm hai chiều với máy chủ...")
             try {
-                val (uploaded, failed, downloaded) = repository.syncTwoWayWithServer(_serverUrl.value)
+                val user = _currentUser.value
+                val isStudent = user?.role == "student"
+                val studentName = if (isStudent) user?.name else null
+                val className = if (isStudent) user?.className else null
+
+                val (uploaded, failed, downloaded) = repository.syncTwoWayWithServer(
+                    serverUrl = _serverUrl.value,
+                    studentName = studentName,
+                    className = className
+                )
                 _isSyncing.value = false
                 val msg = buildString {
                     if (uploaded > 0) append("Đã gửi $uploaded bài lên server. ")
@@ -296,14 +340,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _currentUser.value = userData
                 _isLoggedIn.value = true
                 _loginError.value = null
-                // Tự động gán lớp quản lý nếu là GV
-                userData.classes?.firstOrNull()?.let { firstCls ->
-                    _selectedClass.value = firstCls
+                if (userData.role == "student") {
+                    // Học sinh: đặt lớp mặc định theo lớp của học sinh và đồng bộ ngay dữ liệu học sinh từ Pi
+                    _selectedClass.value = userData.className ?: ""
+                    _selectedStudent.value = userData.name
+                    syncStudentDataFromServer(userData)
+                } else {
+                    // Tự động gán lớp quản lý nếu là GV
+                    userData.classes?.firstOrNull()?.let { firstCls ->
+                        _selectedClass.value = firstCls
+                    }
+                    fetchClassesAndStudents()
+                    fetchServerGrades()
                 }
-                fetchClassesAndStudents()
-                fetchServerGrades()
             }.onFailure { err ->
                 _loginError.value = err.message ?: "Tài khoản hoặc mật khẩu không chính xác"
+            }
+        }
+    }
+
+    fun syncStudentDataFromServer(userData: UserData) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            try {
+                val (_, _, downloaded) = repository.syncTwoWayWithServer(
+                    serverUrl = _serverUrl.value,
+                    studentName = userData.name,
+                    className = userData.className
+                )
+                val list = repository.fetchGradesFromServer(
+                    serverUrl = _serverUrl.value,
+                    className = userData.className,
+                    search = userData.name
+                )
+                if (list.isNotEmpty()) {
+                    _serverGradesList.value = list
+                    _currentResult.value = list.first()
+                }
+                android.util.Log.d("MainViewModel", "Đã đồng bộ xong dữ liệu học sinh: tải về $downloaded bài thi.")
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Lỗi đồng bộ học sinh: ${e.message}")
+            } finally {
+                _isSyncing.value = false
             }
         }
     }

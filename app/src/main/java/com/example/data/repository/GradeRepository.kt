@@ -494,10 +494,14 @@ class GradeRepository(
         Pair(successCount, failCount)
     }
 
-    suspend fun fetchGradesFromServer(serverUrl: String, className: String? = null): List<GradeResult> = withContext(Dispatchers.IO) {
+    suspend fun fetchGradesFromServer(
+        serverUrl: String,
+        className: String? = null,
+        search: String? = null
+    ): List<GradeResult> = withContext(Dispatchers.IO) {
         try {
             val api = NetworkClient.createService(serverUrl)
-            val res = api.getGrades(className = className)
+            val res = api.getGrades(className = className, search = search)
             if (res.isSuccessful && res.body()?.grades != null) {
                 val serverList = res.body()!!.grades!!
                 serverList.map { item ->
@@ -541,12 +545,16 @@ class GradeRepository(
      * - Bước 2: Kéo toàn bộ bài chấm từ server về và lưu vào Room Database trên máy
      * Trả về: Triple(số bài tải lên thành công, số bài tải lên thất bại, số bài mới tải từ server về)
      */
-    suspend fun syncTwoWayWithServer(serverUrl: String): Triple<Int, Int, Int> = withContext(Dispatchers.IO) {
+    suspend fun syncTwoWayWithServer(
+        serverUrl: String,
+        studentName: String? = null,
+        className: String? = null
+    ): Triple<Int, Int, Int> = withContext(Dispatchers.IO) {
         // 1. Đẩy các bài offline nội bộ lên máy chủ
         val (uploadedSuccess, uploadedFail) = syncAllGradesToServer(serverUrl)
 
         // 2. Tải toàn bộ bài chấm từ máy chủ về lưu vào Room DB nội bộ
-        val serverGrades = fetchGradesFromServer(serverUrl)
+        val serverGrades = fetchGradesFromServer(serverUrl, className = className, search = studentName)
         var downloadedCount = 0
         if (serverGrades.isNotEmpty()) {
             val localRecords = dao.getAllRecordsList()

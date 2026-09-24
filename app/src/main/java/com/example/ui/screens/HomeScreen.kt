@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.example.data.api.UserData
 import com.example.data.model.GradeResult
 import com.example.data.repository.SampleEssays
 import com.example.ui.components.NotebookBackground
@@ -79,6 +80,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onSelectHistoryItem: (GradeResult) -> Unit,
     onOpenReports: () -> Unit = {},
+    currentUser: UserData? = null,
     modifier: Modifier = Modifier
 ) {
     // Pulse animation for server online dot
@@ -92,6 +94,8 @@ fun HomeScreen(
         ),
         label = "dotAlpha"
     )
+
+    val isStudent = currentUser?.role == "student"
 
     // Dynamic metrics calculated from Room history records
     val totalGradedDisplay = historyList.size.toString()
@@ -148,7 +152,20 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 2. User Greeting Row: ViHand Grade | Xin chào, Thầy Long! — Lớp 3A1, 3A2 | GV Badge
+            // 2. User Greeting Row: Dynamic based on currentUser role (Giáo viên / Học sinh)
+            val greetingName = if (isStudent) {
+                "Xin chào, ${currentUser?.name ?: "Học sinh"}! — ${if (!currentUser?.className.isNullOrBlank()) "Lớp ${currentUser?.className}" else "Em học sinh"}"
+            } else {
+                val classInfo = currentUser?.classes?.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "Lớp phụ trách"
+                "Xin chào, ${currentUser?.name ?: "Thầy Long"}! — $classInfo"
+            }
+            val badgeText = if (isStudent) "HS" else "GV"
+            val badgeGradient = if (isStudent) {
+                listOf(Color(0xFF2563EB), Color(0xFF1D4ED8))
+            } else {
+                listOf(Color(0xFF059669), Color(0xFF047857))
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -160,13 +177,13 @@ fun HomeScreen(
                             modifier = Modifier
                                 .size(28.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(if (AppTheme.colors.isDark) Color(0xFF065F46) else Color(0xFFD1FAE5)),
+                                .background(if (isStudent) (if (AppTheme.colors.isDark) Color(0xFF1E3A8A) else Color(0xFFDBEAFE)) else (if (AppTheme.colors.isDark) Color(0xFF065F46) else Color(0xFFD1FAE5))),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Edit,
+                                imageVector = if (isStudent) Icons.Default.Description else Icons.Default.Edit,
                                 contentDescription = null,
-                                tint = if (AppTheme.colors.isDark) EmeraldPrimary else Color(0xFF047857),
+                                tint = if (isStudent) (if (AppTheme.colors.isDark) Color(0xFF60A5FA) else Color(0xFF2563EB)) else (if (AppTheme.colors.isDark) EmeraldPrimary else Color(0xFF047857)),
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -180,27 +197,23 @@ fun HomeScreen(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Xin chào, Thầy Long! — Lớp 3A1, 3A2",
+                        text = greetingName,
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTheme.colors.textMuted
                     )
                 }
 
-                // Avatar Badge "GV"
+                // Avatar Badge "GV" hoặc "HS"
                 Box(
                     modifier = Modifier
                         .size(42.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFF059669), Color(0xFF047857))
-                            )
-                        )
-                        .border(1.5.dp, if (AppTheme.colors.isDark) EmeraldPrimary else Color(0xFF059669), CircleShape),
+                        .background(Brush.linearGradient(badgeGradient))
+                        .border(1.5.dp, if (isStudent) Color(0xFF3B82F6) else (if (AppTheme.colors.isDark) EmeraldPrimary else Color(0xFF059669)), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "GV",
+                        text = badgeText,
                         color = Color.White,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Black
@@ -231,7 +244,7 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Tổng bài đã chấm",
+                                    text = if (isStudent) "Bài thi của em" else "Tổng bài đã chấm",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = AppTheme.colors.textMuted,
                                     fontSize = 11.sp
@@ -276,29 +289,29 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Học sinh",
+                                    text = if (isStudent) "Bài đạt 9-10đ" else "Học sinh",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = AppTheme.colors.textMuted,
                                     fontSize = 11.sp
                                 )
                                 Icon(
-                                    imageVector = Icons.Default.People,
+                                    imageVector = if (isStudent) Icons.Default.Star else Icons.Default.People,
                                     contentDescription = null,
-                                    tint = Color(0xFF38BDF8),
+                                    tint = if (isStudent) AccentAmber else Color(0xFF38BDF8),
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = studentsCountDisplay,
+                                    text = if (isStudent) historyList.count { it.criteria.totalScore >= 9.0f }.toString() else studentsCountDisplay,
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.Black,
                                     color = AppTheme.colors.textPrimary
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "em",
+                                    text = if (isStudent) "bài" else "em",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.colors.textMuted,
                                     modifier = Modifier.padding(bottom = 4.dp)
@@ -372,7 +385,7 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Loại bài tập",
+                                    text = if (isStudent) "Cần rèn thêm" else "Loại bài tập",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = AppTheme.colors.textMuted,
                                     fontSize = 11.sp
@@ -387,14 +400,14 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = "6",
+                                    text = if (isStudent) historyList.count { it.criteria.totalScore < 7.0f }.toString() else "6",
                                     style = MaterialTheme.typography.headlineMedium,
                                     fontWeight = FontWeight.Black,
                                     color = AppTheme.colors.textPrimary
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "dạng",
+                                    text = if (isStudent) "bài" else "dạng",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = AppTheme.colors.textMuted,
                                     modifier = Modifier.padding(bottom = 4.dp)
@@ -404,59 +417,61 @@ fun HomeScreen(
                     }
                 }
 
-                // Nút mở Báo Cáo & Phân Tích Lớp Học GDPT 2018
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = AppTheme.colors.card,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { onOpenReports() }
-                        .testTag("home_open_reports_btn")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                // Nút mở Báo Cáo & Phân Tích Lớp Học GDPT 2018 (Chỉ dành cho Giáo viên)
+                if (!isStudent) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = AppTheme.colors.card,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, AppTheme.colors.border),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onOpenReports() }
+                            .testTag("home_open_reports_btn")
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(EmeraldPrimary.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Assessment,
-                                    contentDescription = null,
-                                    tint = EmeraldPrimary,
-                                    modifier = Modifier.size(17.dp)
-                                )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 11.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(EmeraldPrimary.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Assessment,
+                                        contentDescription = null,
+                                        tint = EmeraldPrimary,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Báo Cáo Phân Tích & Học Sinh Cần Kèm",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AppTheme.colors.textPrimary
+                                    )
+                                    Text(
+                                        text = "Phát hiện lỗi s/x, hỏi/ngã theo GDPT 2018",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AppTheme.colors.textMuted,
+                                        fontSize = 10.5.sp
+                                    )
+                                }
                             }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "Báo Cáo Phân Tích & Học Sinh Cần Kèm",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = AppTheme.colors.textPrimary
-                                )
-                                Text(
-                                    text = "Phát hiện lỗi s/x, hỏi/ngã theo GDPT 2018",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = AppTheme.colors.textMuted,
-                                    fontSize = 10.5.sp
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = AppTheme.colors.textMuted,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = null,
-                            tint = AppTheme.colors.textMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
                     }
                 }
             }

@@ -281,6 +281,7 @@ fun ViHandGradeApp(
                             gradingState = gradingState,
                             historyList = historyList,
                             serverUrl = serverUrl,
+                            currentUser = currentUser,
                             onOpenScanner = { activeTab = "camera" },
                             onSelectSample = { sample ->
                                 viewModel.loadSample(sample)
@@ -298,13 +299,19 @@ fun ViHandGradeApp(
                     "camera" -> {
                         CameraScanScreen(
                             onCapture = { bitmap: Bitmap ->
-                                viewModel.gradeBitmap(bitmap)
+                                val isStudent = currentUser?.role == "student"
+                                val std = if (isStudent) currentUser?.name else null
+                                val cls = if (isStudent) currentUser?.className else null
+                                viewModel.gradeBitmap(bitmap, studentName = std ?: "Học sinh", className = cls ?: "Lớp 3A")
                             },
                             onCaptureWithDetails = { bitmap, cls, std, _ ->
+                                val isStudent = currentUser?.role == "student"
+                                val finalStd = if (isStudent) (currentUser?.name ?: std) else std
+                                val finalCls = if (isStudent) (currentUser?.className ?: cls) else cls
                                 viewModel.gradeBitmap(
                                     bitmap = bitmap,
-                                    studentName = std,
-                                    className = cls
+                                    studentName = finalStd,
+                                    className = finalCls
                                 )
                             },
                             onBatchCapture = { bitmaps, selectedClass ->
@@ -327,6 +334,7 @@ fun ViHandGradeApp(
                                 onSelectSample = { sample -> viewModel.loadSample(sample) },
                                 onSaveModifiedGrade = { modified -> viewModel.saveModifiedGrade(modified) },
                                 isDarkTheme = isDarkTheme,
+                                isTeacher = currentUser?.role != "student",
                                 onToggleTheme = onToggleTheme
                             )
                         } else {

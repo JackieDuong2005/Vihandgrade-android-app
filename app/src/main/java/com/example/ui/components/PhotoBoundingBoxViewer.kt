@@ -171,6 +171,25 @@ fun PhotoBoundingBoxViewer(
         }
     }
 
+    val context = LocalContext.current
+    val imageIntrinsicRatio = remember(resolvedBitmap, result.sampleImageResId) {
+        when {
+            resolvedBitmap != null && resolvedBitmap.height > 0 -> {
+                resolvedBitmap.width.toFloat() / resolvedBitmap.height.toFloat()
+            }
+            result.sampleImageResId != null -> {
+                try {
+                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeResource(context.resources, result.sampleImageResId, opts)
+                    if (opts.outHeight > 0) opts.outWidth.toFloat() / opts.outHeight.toFloat() else 1.5f
+                } catch (_: Exception) {
+                    1.5f
+                }
+            }
+            else -> 1.5f // Default 3:2 notebook ratio
+        }
+    }
+
     // Filter errors according to active chip
     val filteredErrors = remember(result.errors, selectedCategoryFilter) {
         if (selectedCategoryFilter == null || selectedCategoryFilter == "Tất cả") {
@@ -280,11 +299,18 @@ fun PhotoBoundingBoxViewer(
                 }
 
                 // Photo Display Container with Bounding Boxes
-                val containerHeight = if (isZoomed) 460.dp else 340.dp
-                BoxWithConstraints(
-                    modifier = Modifier
+                val containerModifier = if (isZoomed) {
+                    Modifier
                         .fillMaxWidth()
-                        .height(containerHeight)
+                        .height(460.dp)
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(imageIntrinsicRatio.coerceIn(0.75f, 2.0f))
+                }
+
+                BoxWithConstraints(
+                    modifier = containerModifier
                         .background(if (isDarkTheme) Color(0xFF090D16) else Color(0xFFF1F5F9))
                         .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
                 ) {
@@ -322,17 +348,38 @@ fun PhotoBoundingBoxViewer(
                         )
                     }
 
-                    // 2. Layer: Interactive Bounding Boxes Overlay
+                    // Calculate precise displayed image dimensions and letterbox offsets under ContentScale.Fit
+                    val containerRatio = if (canvasHeight.value > 0f) canvasWidth.value / canvasHeight.value else 1f
+                    val displayedWidth: androidx.compose.ui.unit.Dp
+                    val displayedHeight: androidx.compose.ui.unit.Dp
+                    val offsetX: androidx.compose.ui.unit.Dp
+                    val offsetY: androidx.compose.ui.unit.Dp
+
+                    if (imageIntrinsicRatio > containerRatio) {
+                        // Wider: image fits width, vertical letterbox bars top & bottom
+                        displayedWidth = canvasWidth
+                        displayedHeight = canvasWidth / imageIntrinsicRatio
+                        offsetX = 0.dp
+                        offsetY = ((canvasHeight - displayedHeight) / 2).coerceAtLeast(0.dp)
+                    } else {
+                        // Taller: image fits height, horizontal letterbox bars left & right
+                        displayedHeight = canvasHeight
+                        displayedWidth = canvasHeight * imageIntrinsicRatio
+                        offsetX = ((canvasWidth - displayedWidth) / 2).coerceAtLeast(0.dp)
+                        offsetY = 0.dp
+                    }
+
+                    // 2. Layer: Interactive Bounding Boxes Overlay anchored strictly to visible image rect
                     filteredErrors.forEachIndexed { index, err ->
                         val isSelected = err.id == selectedErrorId
                         val categoryColor = getErrorCategoryColor(err.errorType)
                         val boxBorderColor = if (isSelected) Color(0xFFF59E0B) else categoryColor
 
-                        // Coordinates relative to BoxWithConstraints
-                        val leftDp = canvasWidth * err.rel_x1
-                        val topDp = canvasHeight * err.rel_y1
-                        val widthDp = (canvasWidth * err.rel_w).coerceAtLeast(42.dp)
-                        val heightDp = (canvasHeight * err.rel_h).coerceAtLeast(28.dp)
+                        // Coordinates relative to visible photo area
+                        val leftDp = offsetX + (displayedWidth * err.rel_x1)
+                        val topDp = offsetY + (displayedHeight * err.rel_y1)
+                        val widthDp = (displayedWidth * err.rel_w).coerceAtLeast(18.dp)
+                        val heightDp = (displayedHeight * err.rel_h).coerceAtLeast(14.dp)
 
                         val animScale by animateFloatAsState(
                             targetValue = if (isSelected) 1.05f else 1.0f,
@@ -342,6 +389,9 @@ fun PhotoBoundingBoxViewer(
                             targetValue = if (isSelected) 0.32f else 0.14f,
                             label = "boxAlpha"
                         )
+
+                        // Avoid pill tag clipping at top edge of container
+                        val badgeOffsetY = if (topDp < 22.dp) (heightDp + 2.dp) else (-16).dp
 
                         Box(
                             modifier = Modifier
@@ -360,14 +410,14 @@ fun PhotoBoundingBoxViewer(
                                 )
                                 .clickable { onSelectError(err) }
                         ) {
-                            // Floating Pill Tag above the box
+                            // Floating Pill Tag above or below the box
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = if (isSelected) Color(0xFFF59E0B) else categoryColor,
                                 shadowElevation = if (isSelected) 4.dp else 1.dp,
                                 modifier = Modifier
                                     .align(Alignment.TopStart)
-                                    .offset(y = (-15).dp, x = (-2).dp)
+                                    .offset(y = badgeOffsetY, x = (-2).dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
