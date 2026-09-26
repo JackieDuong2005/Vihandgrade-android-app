@@ -79,63 +79,67 @@ import com.example.ui.theme.EmeraldPrimary
 import java.io.File
 
 /**
- * 6 Vietnamese pedagogical error color categories matching ViHand Grade Web specification:
- * 1. Phụ âm đầu (ch/tr, s/x, d/gi/r, l/n): Coral Red (#EF4444)
- * 2. Vần (uôn/uông, iên/iêng, ao/au): Amber Orange (#F59E0B)
- * 3. Dấu thanh (Hỏi/Ngã, Sắc/Nặng): Sky Blue (#0EA5E9)
- * 4. Viết hoa (Đầu câu, Danh từ riêng): Violet/Indigo (#8B5CF6)
- * 5. Bỏ sót / Thừa chữ: Rose Pink (#F43F5E)
- * 6. Dấu câu / Khoảng cách / Khác: Slate Gray (#64748B)
+ * 6 loại mã màu sư phạm chuẩn hóa theo ERROR_THEMES của Web ViHand Grade:
+ * 1. Phụ âm đầu (ch/tr, s/x, d/gi/r, l/n): Rose-500 (#F43F5E)
+ * 2. Dấu thanh (Hỏi/Ngã, Sắc/Nặng): Purple-500 (#A855F7)
+ * 3. Vần (an/ang, en/eng, iên/iêng): Orange-500 (#F97316)
+ * 4. Nguyên âm / Âm chính (o/ô, u/ư): Emerald-500 (#10B981)
+ * 5. Âm cuối (t/c, n/ng): Sky-500 (#0EA5E9)
+ * 6. Viết hoa (Đầu câu, Danh từ riêng): Amber-500 (#F59E0B)
  */
 fun getErrorCategoryColor(errorType: String): Color {
     val lower = errorType.lowercase()
     return when {
-        lower.contains("phụ âm") || lower.contains("âm đầu") || lower.contains("ch/tr") ||
-        lower.contains("s/x") || lower.contains("l/n") || lower.contains("d/gi") || lower.contains("c/k") ->
-            Color(0xFFEF4444) // Coral Red
+        lower.contains("phụ âm đầu") || lower.contains("âm đầu") || lower.contains("phu_am_dau") ||
+        lower.contains("ch/tr") || lower.contains("s/x") || lower.contains("l/n") || lower.contains("d/gi") || lower.contains("c/k") ->
+            com.example.ui.theme.ErrorPhuAmDau
 
-        lower.contains("vần") || lower.contains("nguyên âm") || lower.contains("uôn") ||
+        lower.contains("thanh") || lower.contains("dấu thanh") || lower.contains("dau_thanh") ||
+        lower.contains("hỏi") || lower.contains("ngã") || lower.contains("sắc") || lower.contains("nặng") ->
+            com.example.ui.theme.ErrorDauThanh
+
+        lower.contains("vần") || lower.contains("van") || lower.contains("uôn") ||
         lower.contains("iên") || lower.contains("ay/ey") || lower.contains("ao/au") ->
-            Color(0xFFF59E0B) // Amber Orange
+            com.example.ui.theme.ErrorVan
 
-        lower.contains("thanh") || lower.contains("dấu thanh") || lower.contains("hỏi") ||
-        lower.contains("ngã") || lower.contains("sắc") || lower.contains("nặng") ->
-            Color(0xFF0EA5E9) // Sky Blue
+        lower.contains("nguyên âm") || lower.contains("âm chính") || lower.contains("am_chinh") ->
+            com.example.ui.theme.ErrorAmChinh
 
-        lower.contains("hoa") || lower.contains("viết hoa") || lower.contains("chữ cái đầu") ||
-        lower.contains("tên riêng") ->
-            Color(0xFF8B5CF6) // Violet / Indigo
+        lower.contains("âm cuối") || lower.contains("phu_am_cuoi") || lower.contains("t/c") || lower.contains("n/ng") ->
+            com.example.ui.theme.ErrorPhuAmCuoi
 
-        lower.contains("sót") || lower.contains("bỏ sót") || lower.contains("thiếu") ||
-        lower.contains("thừa") || lower.contains("lặp") ->
-            Color(0xFFF43F5E) // Rose Pink
+        lower.contains("hoa") || lower.contains("viết hoa") || lower.contains("viet_hoa") ||
+        lower.contains("chữ cái đầu") || lower.contains("tên riêng") ->
+            com.example.ui.theme.ErrorVietHoa
 
-        else -> Color(0xFF64748B) // Slate Gray (Dấu câu, khoảng cách, format)
+        else -> Color(0xFF64748B) // Khác / Dấu câu
     }
 }
 
 fun getErrorCategoryName(errorType: String): String {
     val lower = errorType.lowercase()
     return when {
-        lower.contains("phụ âm") || lower.contains("âm đầu") || lower.contains("ch/tr") ||
-        lower.contains("s/x") || lower.contains("l/n") || lower.contains("d/gi") || lower.contains("c/k") ->
+        lower.contains("phụ âm đầu") || lower.contains("âm đầu") || lower.contains("phu_am_dau") ||
+        lower.contains("ch/tr") || lower.contains("s/x") || lower.contains("l/n") || lower.contains("d/gi") || lower.contains("c/k") ->
             "Phụ âm đầu"
 
-        lower.contains("vần") || lower.contains("nguyên âm") || lower.contains("uôn") ||
-        lower.contains("iên") || lower.contains("ay/ey") || lower.contains("ao/au") ->
-            "Vần & Nguyên âm"
-
-        lower.contains("thanh") || lower.contains("dấu thanh") || lower.contains("hỏi") ||
-        lower.contains("ngã") || lower.contains("sắc") || lower.contains("nặng") ->
+        lower.contains("thanh") || lower.contains("dấu thanh") || lower.contains("dau_thanh") ||
+        lower.contains("hỏi") || lower.contains("ngã") || lower.contains("sắc") || lower.contains("nặng") ->
             "Dấu thanh"
 
-        lower.contains("hoa") || lower.contains("viết hoa") || lower.contains("chữ cái đầu") ||
-        lower.contains("tên riêng") ->
-            "Viết hoa"
+        lower.contains("vần") || lower.contains("van") || lower.contains("uôn") ||
+        lower.contains("iên") || lower.contains("ay/ey") || lower.contains("ao/au") ->
+            "Vần"
 
-        lower.contains("sót") || lower.contains("bỏ sót") || lower.contains("thiếu") ||
-        lower.contains("thừa") || lower.contains("lặp") ->
-            "Thiếu / Thừa chữ"
+        lower.contains("nguyên âm") || lower.contains("âm chính") || lower.contains("am_chinh") ->
+            "Nguyên âm"
+
+        lower.contains("âm cuối") || lower.contains("phu_am_cuoi") || lower.contains("t/c") || lower.contains("n/ng") ->
+            "Âm cuối"
+
+        lower.contains("hoa") || lower.contains("viết hoa") || lower.contains("viet_hoa") ||
+        lower.contains("chữ cái đầu") || lower.contains("tên riêng") ->
+            "Viết hoa"
 
         else -> "Dấu câu & Khác"
     }

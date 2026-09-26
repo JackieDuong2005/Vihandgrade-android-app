@@ -1433,8 +1433,9 @@ private fun ComparativeDiffSection(
                         text = result.extractedText.trim(),
                         modifier = Modifier.padding(14.dp),
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            lineHeight = 24.sp,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
+                            lineHeight = 26.sp,
+                            fontSize = 15.5.sp,
+                            fontFamily = com.example.ui.theme.FontFamilyTieuHoc
                         ),
                         color = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E3A8A)
                     )
@@ -1507,9 +1508,10 @@ private fun ComparativeDiffSection(
                         text = result.correctedFullText.trim(),
                         modifier = Modifier.padding(14.dp),
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            lineHeight = 24.sp,
+                            lineHeight = 26.sp,
+                            fontSize = 15.5.sp,
                             fontWeight = FontWeight.Medium,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Serif
+                            fontFamily = com.example.ui.theme.FontFamilyTieuHoc
                         ),
                         color = if (isDarkTheme) Color(0xFFF0FDF4) else Color(0xFF14532D)
                     )

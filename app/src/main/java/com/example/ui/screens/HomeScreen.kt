@@ -60,7 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.api.UserData
 import com.example.data.model.GradeResult
-import com.example.data.repository.SampleEssays
+
 import com.example.ui.components.NotebookBackground
 import com.example.ui.theme.AccentAmber
 import com.example.ui.theme.AccentCoral
@@ -563,79 +563,6 @@ fun HomeScreen(
             }
         }
 
-        // Quick Test Card: Bài thi chữ viết tay "Gió từ tay mẹ" (1 Chạm Test Ngay)
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable { onSelectSample(SampleEssays.sampleTayMe) }
-                    .testTag("quick_test_tay_me_card"),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (AppTheme.colors.isDark) Color(0xFF132A24) else Color(0xFFECFDF5)
-                ),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, EmeraldPrimary.copy(alpha = 0.6f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(EmeraldPrimary.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "📝",
-                            fontSize = 22.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Test nhanh: Gió từ tay mẹ",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = AppTheme.colors.textPrimary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = AccentCoral.copy(alpha = 0.2f)
-                            ) {
-                                Text(
-                                    text = "6 lỗi sai",
-                                    color = AccentCoral,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Ảnh bài thi thực tế: Gó, su, xay, sá xời, chưa... Bấm để xem chấm điểm ngay!",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppTheme.colors.textMuted,
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = "Chấm ngay",
-                        tint = EmeraldPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        }
 
         // 5. Section: 5 bài chấm gần nhất (Xem tất cả)
         item {

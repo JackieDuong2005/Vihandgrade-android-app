@@ -79,8 +79,9 @@ import com.example.ui.screens.GradingResultScreen
 import com.example.ui.screens.HistoryScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LoginScreen
+import com.example.ui.screens.ProfileSettingsScreen
 import com.example.ui.screens.ReportsAnalyticsScreen
-import com.example.ui.screens.ServerSettingsScreen
+import com.example.ui.screens.StudentHomeScreen
 import com.example.ui.theme.AppTheme
 import com.example.ui.theme.AccentCoral
 import com.example.ui.theme.EmeraldPrimary
@@ -159,12 +160,14 @@ fun ViHandGradeApp(
     val ttsSpeed by viewModel.ttsSpeed.collectAsStateWithLifecycle()
     val photoCacheSizeBytes by viewModel.photoCacheSizeBytes.collectAsStateWithLifecycle()
 
-    // 5 Screen tabs matching the HTML Mockup: "home" (default), "grade", "camera", "dictation", "settings"
-    var activeTab by remember { mutableStateOf("home") }
+    val isStudent = currentUser?.role == "student"
+    var activeTab by remember(currentUser?.role) {
+        mutableStateOf(if (isStudent) "student_home" else "home")
+    }
 
-    // Intercept hardware/system back button so user is never trapped in any sub-screen
-    BackHandler(enabled = activeTab != "home") {
-        activeTab = "home"
+    val defaultHomeTab = if (isStudent) "student_home" else "home"
+    BackHandler(enabled = activeTab != defaultHomeTab) {
+        activeTab = defaultHomeTab
     }
 
     // Only navigate to "grade" tab when grading state transitions to Success
@@ -176,8 +179,6 @@ fun ViHandGradeApp(
 
     Scaffold(
         bottomBar = {
-            // 5-Tab Bottom Navigation Bar matching HTML Mockup (always accessible across all screens)
-            // [1.Tổng quan] [2.Điểm số] [3.Chấm bài (Center)] [4.Chính tả] [5.Trạm Pi]
             Surface(
                 color = AppTheme.colors.card,
                 tonalElevation = 8.dp,
@@ -187,14 +188,42 @@ fun ViHandGradeApp(
                     .fillMaxWidth()
                     .navigationBarsPadding()
             ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceAround,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Tab 1: Tổng quan
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isStudent) {
+                        // Student Tab 1: Góc học tập
+                        BottomNavTabItem(
+                            icon = Icons.Default.Dashboard,
+                            label = "Góc học tập",
+                            isSelected = activeTab == "student_home",
+                            onClick = { activeTab = "student_home" },
+                            testTag = "nav_home"
+                        )
+
+                        // Student Tab 2: Sổ điểm
+                        BottomNavTabItem(
+                            icon = Icons.Default.History,
+                            label = "Sổ điểm",
+                            isSelected = activeTab == "history",
+                            onClick = { activeTab = "history" },
+                            testTag = "nav_history"
+                        )
+
+                        // Student Tab 3: Tài khoản
+                        BottomNavTabItem(
+                            icon = Icons.Default.Settings,
+                            label = "Tài khoản",
+                            isSelected = activeTab == "settings",
+                            onClick = { activeTab = "settings" },
+                            testTag = "nav_settings"
+                        )
+                    } else {
+                        // Teacher Tab 1: Tổng quan
                         BottomNavTabItem(
                             icon = Icons.Default.Dashboard,
                             label = "Tổng quan",
@@ -203,7 +232,7 @@ fun ViHandGradeApp(
                             testTag = "nav_home"
                         )
 
-                        // Tab 2: Điểm số
+                        // Teacher Tab 2: Điểm số
                         BottomNavTabItem(
                             icon = Icons.Default.BarChart,
                             label = "Điểm số",
@@ -212,7 +241,7 @@ fun ViHandGradeApp(
                             testTag = "nav_grade"
                         )
 
-                        // Tab 3: Chấm bài (Elevated Center Button)
+                        // Teacher Tab 3: Chấm bài (Elevated Center Button)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
@@ -245,7 +274,7 @@ fun ViHandGradeApp(
                             )
                         }
 
-                        // Tab 4: Chính tả
+                        // Teacher Tab 4: Chính tả
                         BottomNavTabItem(
                             icon = Icons.Default.VolumeUp,
                             label = "Chính tả",
@@ -254,16 +283,17 @@ fun ViHandGradeApp(
                             testTag = "nav_dictation"
                         )
 
-                        // Tab 5: Cài đặt
+                        // Teacher Tab 5: Cài đặt & Tài khoản
                         BottomNavTabItem(
                             icon = Icons.Default.Settings,
-                            label = "Cài đặt",
+                            label = "Tài khoản",
                             isSelected = activeTab == "settings",
                             onClick = { activeTab = "settings" },
                             testTag = "nav_settings"
                         )
                     }
                 }
+            }
         },
         containerColor = AppTheme.colors.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -382,37 +412,25 @@ fun ViHandGradeApp(
                     "dictation" -> {
                         DictationScreen(serverUrl = serverUrl)
                     }
-                    "settings" -> {
-                        ServerSettingsScreen(
-                            serverUrl = serverUrl,
-                            pingStatus = pingStatus,
-                            isPinging = isPinging,
-                            syncStatus = syncStatus,
-                            isSyncing = isSyncing,
-                            localRecordsCount = historyList.size,
-                            photoCacheSizeBytes = photoCacheSizeBytes,
-                            schoolName = schoolName,
-                            penaltyPerError = penaltyPerError,
-                            autoEncouragement = autoEncouragement,
-                            autoBoundingBox = autoBoundingBox,
-                            ttsVoice = ttsVoice,
-                            ttsSpeed = ttsSpeed,
-                            onSaveUrl = { newUrl -> viewModel.updateServerUrl(newUrl) },
-                            onPing = { viewModel.testConnection() },
-                            onSyncGrades = { viewModel.syncAllGradesToServer() },
-                            onRefreshClassesAndStudents = { viewModel.fetchClassesAndStudents() },
-                            onClearLocalRecords = { viewModel.clearAllRecords() },
-                            onClearPhotoCache = { viewModel.clearPhotoCache() },
-                            onUpdateSchoolName = { viewModel.updateSchoolName(it) },
-                            onUpdatePenaltyPerError = { viewModel.updatePenaltyPerError(it) },
-                            onUpdateAutoEncouragement = { viewModel.updateAutoEncouragement(it) },
-                            onUpdateAutoBoundingBox = { viewModel.updateAutoBoundingBox(it) },
-                            onUpdateTtsVoice = { viewModel.updateTtsVoice(it) },
-                            onUpdateTtsSpeed = { viewModel.updateTtsSpeed(it) },
+                    "student_home" -> {
+                        StudentHomeScreen(
                             currentUser = currentUser,
-                            onLogout = { viewModel.logout() },
+                            recentRecords = historyList,
+                            onOpenHistory = { activeTab = "history" },
+                            onSelectRecord = { record ->
+                                viewModel.loadSample(record)
+                                activeTab = "grade"
+                            }
+                        )
+                    }
+                    "settings" -> {
+                        ProfileSettingsScreen(
+                            currentUser = currentUser,
                             isDarkTheme = isDarkTheme,
-                            onToggleTheme = onToggleTheme
+                            onToggleTheme = onToggleTheme,
+                            onLogout = { viewModel.logout() },
+                            onBack = { activeTab = if (isStudent) "student_home" else "home" },
+                            serverUrl = serverUrl
                         )
                     }
                     "history" -> {

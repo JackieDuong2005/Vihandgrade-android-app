@@ -2,9 +2,17 @@ package com.example.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.example.R
+
+// Font chữ Tiểu học Chuẩn Bộ GD&ĐT (HP001 ô ly 4 hàng / 5 hàng)
+val FontFamilyTieuHoc = FontFamily(
+    Font(R.font.hp001_normal, FontWeight.Normal),
+    Font(R.font.hp001_bold, FontWeight.Bold)
+)
 
 val Typography = Typography(
     displaySmall = TextStyle(
