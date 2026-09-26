@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.media.ExifInterface
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.filled.CropFree
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.Card
@@ -48,7 +51,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -156,8 +163,20 @@ fun PhotoBoundingBoxViewer(
     val emeraldText = if (isDarkTheme) EmeraldPrimary else Color(0xFF047857)
     var selectedCategoryFilter by remember { mutableStateOf<String?>("Tất cả") }
     var isZoomed by remember { mutableStateOf(false) }
+    var showBoundingBoxes by remember { mutableStateOf(true) }
 
-    // Resolve bitmap in order: in-memory photoBitmap -> disk photoPath -> sampleImageResId -> null
+    // 1. Chuẩn hóa URL ảnh đầy đủ (tự động ghép domain nếu là đường dẫn tương đối)
+    val effectiveImageUrl = remember(result.imageUrl, result.photoPath) {
+        val url = result.imageUrl?.takeIf { it.isNotBlank() }
+        when {
+            url != null && (url.startsWith("http://") || url.startsWith("https://")) -> url
+            url != null && url.startsWith("/") -> "https://vihandgrade.click$url"
+            !result.photoPath.isNullOrBlank() && (result.photoPath.startsWith("http://") || result.photoPath.startsWith("https://")) -> result.photoPath
+            else -> null
+        }
+    }
+
+    // 2. Resolve bitmap an toàn với xoay EXIF tự động
     val resolvedBitmap = remember(result.id, result.photoPath, result.photoBitmap) {
         when {
             result.photoBitmap != null -> result.photoBitmap
@@ -165,7 +184,26 @@ fun PhotoBoundingBoxViewer(
                 val file = File(result.photoPath)
                 if (file.exists() && file.length() > 0) {
                     try {
-                        BitmapFactory.decodeFile(file.absolutePath)
+                        val rawBmp = BitmapFactory.decodeFile(file.absolutePath)
+                        if (rawBmp != null) {
+                            val exif = ExifInterface(file.absolutePath)
+                            val orientation = exif.getAttributeInt(
+                                ExifInterface.TAG_ORIENTATION,
+                                ExifInterface.ORIENTATION_NORMAL
+                            )
+                            val rotation = when (orientation) {
+                                ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                                ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                                ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                                else -> 0f
+                            }
+                            if (rotation != 0f) {
+                                val matrix = android.graphics.Matrix().apply { postRotate(rotation) }
+                                Bitmap.createBitmap(rawBmp, 0, 0, rawBmp.width, rawBmp.height, matrix, true)
+                            } else {
+                                rawBmp
+                            }
+                        } else null
                     } catch (_: Exception) {
                         null
                     }
@@ -175,22 +213,45 @@ fun PhotoBoundingBoxViewer(
         }
     }
 
+    // 3. Tự động lấy kích thước thực tế (Width & Height) của ảnh
     val context = LocalContext.current
-    val imageIntrinsicRatio = remember(resolvedBitmap, result.sampleImageResId) {
-        when {
-            resolvedBitmap != null && resolvedBitmap.height > 0 -> {
-                resolvedBitmap.width.toFloat() / resolvedBitmap.height.toFloat()
-            }
-            result.sampleImageResId != null -> {
+    var detectedWidth by remember(result.id) { mutableIntStateOf(0) }
+    var detectedHeight by remember(result.id) { mutableIntStateOf(0) }
+
+    LaunchedEffect(resolvedBitmap, result.sampleImageResId, result.photoPath) {
+        if (resolvedBitmap != null && resolvedBitmap.width > 0 && resolvedBitmap.height > 0) {
+            detectedWidth = resolvedBitmap.width
+            detectedHeight = resolvedBitmap.height
+        } else if (result.sampleImageResId != null) {
+            try {
+                val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeResource(context.resources, result.sampleImageResId, opts)
+                if (opts.outWidth > 0 && opts.outHeight > 0) {
+                    detectedWidth = opts.outWidth
+                    detectedHeight = opts.outHeight
+                }
+            } catch (_: Exception) {}
+        } else if (!result.photoPath.isNullOrBlank()) {
+            val file = File(result.photoPath)
+            if (file.exists() && file.length() > 0) {
                 try {
                     val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeResource(context.resources, result.sampleImageResId, opts)
-                    if (opts.outHeight > 0) opts.outWidth.toFloat() / opts.outHeight.toFloat() else 1.5f
-                } catch (_: Exception) {
-                    1.5f
-                }
+                    BitmapFactory.decodeFile(file.absolutePath, opts)
+                    if (opts.outWidth > 0 && opts.outHeight > 0) {
+                        detectedWidth = opts.outWidth
+                        detectedHeight = opts.outHeight
+                    }
+                } catch (_: Exception) {}
             }
-            else -> 1.5f // Default 3:2 notebook ratio
+        }
+    }
+
+    // Tỷ lệ khung ảnh thực tế (mặc định 1.333f cho vở 4:3 nếu chưa tải xong)
+    val actualAspectRatio = remember(detectedWidth, detectedHeight, resolvedBitmap) {
+        when {
+            detectedWidth > 0 && detectedHeight > 0 -> detectedWidth.toFloat() / detectedHeight.toFloat()
+            resolvedBitmap != null && resolvedBitmap.height > 0 -> resolvedBitmap.width.toFloat() / resolvedBitmap.height.toFloat()
+            else -> 1.333f
         }
     }
 
@@ -259,7 +320,7 @@ fun PhotoBoundingBoxViewer(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        if (resolvedBitmap != null || !result.photoPath.isNullOrBlank()) {
+                        if (resolvedBitmap != null || !result.photoPath.isNullOrBlank() || !effectiveImageUrl.isNullOrBlank()) {
                             Surface(
                                 shape = RoundedCornerShape(6.dp),
                                 color = if (isDarkTheme) Color(0xFF334155) else Color(0xFFE2E8F0)
@@ -286,8 +347,24 @@ fun PhotoBoundingBoxViewer(
                         }
                     }
 
-                    // Zoom / Inspect Toggle Button
+                    // Action Controls: Toggle BBoxes Visibility & Zoom
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Eye Toggle Button: Hide / Show BBoxes
+                        IconButton(
+                            onClick = { showBoundingBoxes = !showBoundingBoxes },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (showBoundingBoxes) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = if (showBoundingBoxes) "Ẩn khung lỗi" else "Hiện khung lỗi",
+                                tint = emeraldText,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // Zoom Toggle Button
                         IconButton(
                             onClick = { isZoomed = !isZoomed },
                             modifier = Modifier.size(28.dp)
@@ -302,138 +379,190 @@ fun PhotoBoundingBoxViewer(
                     }
                 }
 
-                // Photo Display Container with Bounding Boxes
-                val containerModifier = if (isZoomed) {
+                // Photo Display Container with Zero-Letterbox Architecture
+                var displayedImgWidthPx by remember { mutableFloatStateOf(0f) }
+                var displayedImgHeightPx by remember { mutableFloatStateOf(0f) }
+                val density = LocalDensity.current
+
+                val zoomModifier = if (isZoomed) {
                     Modifier
                         .fillMaxWidth()
-                        .height(460.dp)
+                        .horizontalScroll(rememberScrollState())
                 } else {
-                    Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(imageIntrinsicRatio.coerceIn(0.75f, 2.0f))
+                    Modifier.fillMaxWidth()
                 }
 
-                BoxWithConstraints(
-                    modifier = containerModifier
-                        .background(if (isDarkTheme) Color(0xFF090D16) else Color(0xFFF1F5F9))
+                Box(
+                    modifier = zoomModifier
                         .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
+                        .background(if (isDarkTheme) Color(0xFF090D16) else Color(0xFFF1F5F9))
                 ) {
-                    val canvasWidth = maxWidth
-                    val canvasHeight = maxHeight
-
-                    // 1. Layer: Background Photo or Authentic Handwriting Canvas
-                    if (resolvedBitmap != null) {
-                        Image(
-                            bitmap = resolvedBitmap.asImageBitmap(),
-                            contentDescription = "Ảnh bài thi học sinh",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit
-                        )
-                    } else if (result.sampleImageResId != null) {
-                        Image(
-                            painter = painterResource(id = result.sampleImageResId),
-                            contentDescription = "Ảnh bài thi mẫu",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit
-                        )
-                    } else if (!result.imageUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = result.imageUrl,
-                            contentDescription = "Ảnh bài thi từ máy chủ",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit
-                        )
+                    val innerImageModifier = if (isZoomed) {
+                        Modifier
+                            .width(540.dp)
+                            .wrapContentHeight()
                     } else {
-                        // Realistic Vietnamese 4-grid elementary notebook simulation
-                        AuthenticNotebookPaperView(
-                            extractedText = result.extractedText,
-                            isDarkTheme = isDarkTheme,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
                     }
 
-                    // Calculate precise displayed image dimensions and letterbox offsets under ContentScale.Fit
-                    val containerRatio = if (canvasHeight.value > 0f) canvasWidth.value / canvasHeight.value else 1f
-                    val displayedWidth: androidx.compose.ui.unit.Dp
-                    val displayedHeight: androidx.compose.ui.unit.Dp
-                    val offsetX: androidx.compose.ui.unit.Dp
-                    val offsetY: androidx.compose.ui.unit.Dp
-
-                    if (imageIntrinsicRatio > containerRatio) {
-                        // Wider: image fits width, vertical letterbox bars top & bottom
-                        displayedWidth = canvasWidth
-                        displayedHeight = canvasWidth / imageIntrinsicRatio
-                        offsetX = 0.dp
-                        offsetY = ((canvasHeight - displayedHeight) / 2).coerceAtLeast(0.dp)
-                    } else {
-                        // Taller: image fits height, horizontal letterbox bars left & right
-                        displayedHeight = canvasHeight
-                        displayedWidth = canvasHeight * imageIntrinsicRatio
-                        offsetX = ((canvasWidth - displayedWidth) / 2).coerceAtLeast(0.dp)
-                        offsetY = 0.dp
-                    }
-
-                    // 2. Layer: Interactive Bounding Boxes Overlay anchored strictly to visible image rect
-                    filteredErrors.forEachIndexed { index, err ->
-                        val isSelected = err.id == selectedErrorId
-                        val categoryColor = getErrorCategoryColor(err.errorType)
-                        val boxBorderColor = if (isSelected) Color(0xFFF59E0B) else categoryColor
-
-                        // Coordinates relative to visible photo area
-                        val leftDp = offsetX + (displayedWidth * err.rel_x1)
-                        val topDp = offsetY + (displayedHeight * err.rel_y1)
-                        val widthDp = (displayedWidth * err.rel_w).coerceAtLeast(18.dp)
-                        val heightDp = (displayedHeight * err.rel_h).coerceAtLeast(14.dp)
-
-                        val animScale by animateFloatAsState(
-                            targetValue = if (isSelected) 1.05f else 1.0f,
-                            label = "boxScale"
-                        )
-                        val animBgAlpha by animateFloatAsState(
-                            targetValue = if (isSelected) 0.32f else 0.14f,
-                            label = "boxAlpha"
-                        )
-
-                        // Avoid pill tag clipping at top edge of container
-                        val badgeOffsetY = if (topDp < 22.dp) (heightDp + 2.dp) else (-16).dp
-
-                        Box(
-                            modifier = Modifier
-                                .offset(x = leftDp, y = topDp)
-                                .size(width = widthDp, height = heightDp)
-                                .scale(animScale)
-                                .zIndex(if (isSelected) 10f else 1f)
-                                .border(
-                                    width = if (isSelected) 3.dp else 1.8.dp,
-                                    color = boxBorderColor,
-                                    shape = RoundedCornerShape(5.dp)
-                                )
-                                .background(
-                                    boxBorderColor.copy(alpha = animBgAlpha),
-                                    shape = RoundedCornerShape(5.dp)
-                                )
-                                .clickable { onSelectError(err) }
-                        ) {
-                            // Floating Pill Tag above or below the box
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = if (isSelected) Color(0xFFF59E0B) else categoryColor,
-                                shadowElevation = if (isSelected) 4.dp else 1.dp,
+                    // LAYER 1: Background Real Handwriting Photo (determines exact layout bounds)
+                    Box(
+                        modifier = innerImageModifier
+                            .onGloballyPositioned { coords ->
+                                displayedImgWidthPx = coords.size.width.toFloat()
+                                displayedImgHeightPx = coords.size.height.toFloat()
+                            }
+                    ) {
+                        if (resolvedBitmap != null) {
+                            Image(
+                                bitmap = resolvedBitmap.asImageBitmap(),
+                                contentDescription = "Ảnh bài thi học sinh",
+                                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                                contentScale = ContentScale.FillWidth
+                            )
+                        } else if (result.sampleImageResId != null) {
+                            Image(
+                                painter = painterResource(id = result.sampleImageResId),
+                                contentDescription = "Ảnh bài thi mẫu",
+                                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                                contentScale = ContentScale.FillWidth
+                            )
+                        } else if (!effectiveImageUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = effectiveImageUrl,
+                                contentDescription = "Ảnh bài thi từ máy chủ",
+                                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                                contentScale = ContentScale.FillWidth,
+                                onSuccess = { state ->
+                                    val intrinsic = state.painter.intrinsicSize
+                                    if (intrinsic.width > 0f && intrinsic.height > 0f) {
+                                        detectedWidth = intrinsic.width.toInt()
+                                        detectedHeight = intrinsic.height.toInt()
+                                    }
+                                }
+                            )
+                        } else {
+                            // Realistic Vietnamese 4-grid elementary notebook simulation
+                            AuthenticNotebookPaperView(
+                                extractedText = result.extractedText,
+                                isDarkTheme = isDarkTheme,
                                 modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .offset(y = badgeOffsetY, x = (-2).dp)
+                                    .fillMaxWidth()
+                                    .height(260.dp)
+                            )
+                        }
+
+                        // LAYER 2: Interactive Bounding Boxes Overlay anchored 1:1 on actual image surface
+                        if (showBoundingBoxes && displayedImgWidthPx > 0f && displayedImgHeightPx > 0f) {
+                            Box(
+                                modifier = Modifier.matchParentSize()
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                ) {
-                                    Text(
-                                        text = "#${index + 1} ✓ ${err.correctedWord}",
-                                        color = if (isSelected) Color(0xFF0F172A) else Color.White,
-                                        fontSize = 8.5.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        maxLines = 1
+                                val displayedWidthDp = with(density) { displayedImgWidthPx.toDp() }
+                                val displayedHeightDp = with(density) { displayedImgHeightPx.toDp() }
+
+                                filteredErrors.forEachIndexed { index, err ->
+                                    val isSelected = err.id == selectedErrorId
+                                    val categoryColor = getErrorCategoryColor(err.errorType)
+                                    val boxBorderColor = if (isSelected) Color(0xFFF59E0B) else categoryColor
+
+                                    // 1. Chuẩn hóa relX [0..0.95]
+                                    val rawRelX = when {
+                                        err.rel_x1 >= 0.001f && err.rel_x1 <= 1.0f -> err.rel_x1
+                                        err.x1 >= 0.001f && err.x1 <= 1.0f -> err.x1
+                                        err.x1 > 1.0f && detectedWidth > 0 -> err.x1 / detectedWidth.toFloat()
+                                        err.rel_x1 > 1.0f && detectedWidth > 0 -> err.rel_x1 / detectedWidth.toFloat()
+                                        else -> 0f
+                                    }
+                                    val safeRelX = rawRelX.coerceIn(0f, 0.95f)
+
+                                    // 2. Chuẩn hóa relY [0..0.95]
+                                    val rawRelY = when {
+                                        err.rel_y1 >= 0.001f && err.rel_y1 <= 1.0f -> err.rel_y1
+                                        err.y1 >= 0.001f && err.y1 <= 1.0f -> err.y1
+                                        err.y1 > 1.0f && detectedHeight > 0 -> err.y1 / detectedHeight.toFloat()
+                                        err.rel_y1 > 1.0f && detectedHeight > 0 -> err.rel_y1 / detectedHeight.toFloat()
+                                        else -> 0f
+                                    }
+                                    val safeRelY = rawRelY.coerceIn(0f, 0.95f)
+
+                                    // 3. Chuẩn hóa relW [0.035..0.35]
+                                    val rawRelW = when {
+                                        err.rel_w >= 0.01f && err.rel_w <= 1.0f -> err.rel_w
+                                        err.x2 > err.x1 && err.x2 > 1.0f && detectedWidth > 0 -> (err.x2 - err.x1) / detectedWidth.toFloat()
+                                        err.x2 > err.x1 && err.x2 <= 1.0f -> (err.x2 - err.x1)
+                                        else -> 0.08f
+                                    }
+                                    val safeRelW = rawRelW.coerceIn(0.035f, 0.35f)
+
+                                    // 4. Chuẩn hóa relH [0.035..0.16] (ngăn kéo dài xuống dòng 2-3)
+                                    val rawRelH = when {
+                                        err.rel_h >= 0.01f && err.rel_h <= 1.0f -> err.rel_h
+                                        err.y2 > err.y1 && err.y2 > 1.0f && detectedHeight > 0 -> (err.y2 - err.y1) / detectedHeight.toFloat()
+                                        err.y2 > err.y1 && err.y2 <= 1.0f -> (err.y2 - err.y1)
+                                        else -> 0.06f
+                                    }
+                                    val safeRelH = rawRelH.coerceIn(0.035f, 0.16f)
+
+                                    val leftDp = displayedWidthDp * safeRelX
+                                    val topDp = displayedHeightDp * safeRelY
+                                    val widthDp = (displayedWidthDp * safeRelW).coerceAtLeast(16.dp)
+                                    val heightDp = (displayedHeightDp * safeRelH).coerceAtLeast(14.dp)
+
+                                    val animScale by animateFloatAsState(
+                                        targetValue = if (isSelected) 1.05f else 1.0f,
+                                        label = "boxScale"
                                     )
+                                    val animBgAlpha by animateFloatAsState(
+                                        targetValue = if (isSelected) 0.32f else 0.14f,
+                                        label = "boxAlpha"
+                                    )
+
+                                    // Vị trí badge: nếu cách mép trên < 24dp thì đặt ở DƯỚI ĐÁY box để không bị che
+                                    val isNearTop = (topDp.value < 24f) || (safeRelY < 0.08f)
+                                    val badgeOffsetY: androidx.compose.ui.unit.Dp = if (isNearTop) (heightDp + 2.dp) else (-18).dp
+
+                                    Box(
+                                        modifier = Modifier
+                                            .offset(x = leftDp, y = topDp)
+                                            .size(width = widthDp, height = heightDp)
+                                            .scale(animScale)
+                                            .zIndex(if (isSelected) 10f else 1f)
+                                            .border(
+                                                width = if (isSelected) 3.dp else 1.8.dp,
+                                                color = boxBorderColor,
+                                                shape = RoundedCornerShape(4.dp)
+                                            )
+                                            .background(
+                                                boxBorderColor.copy(alpha = animBgAlpha),
+                                                shape = RoundedCornerShape(4.dp)
+                                            )
+                                            .clickable { onSelectError(err) }
+                                    ) {
+                                        // Floating Pill Tag above or below the box
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = if (isSelected) Color(0xFFF59E0B) else categoryColor,
+                                            shadowElevation = if (isSelected) 4.dp else 1.dp,
+                                            modifier = Modifier
+                                                .align(Alignment.TopStart)
+                                                .offset(y = badgeOffsetY, x = (-2).dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    text = "#${index + 1} ✓ ${err.correctedWord}",
+                                                    color = if (isSelected) Color(0xFF0F172A) else Color.White,
+                                                    fontSize = 8.5.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

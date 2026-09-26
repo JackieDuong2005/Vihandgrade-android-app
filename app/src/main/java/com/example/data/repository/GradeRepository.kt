@@ -157,6 +157,33 @@ class GradeRepository(
         }
 
         val errors = body.errors?.mapIndexed { index, err ->
+            val bmpW = bitmap.width.toFloat().coerceAtLeast(1f)
+            val bmpH = bitmap.height.toFloat().coerceAtLeast(1f)
+            val relX1 = when {
+                err.relX1 != null && err.relX1 in 0f..1f -> err.relX1
+                err.x1 in 0f..1f -> err.x1
+                err.x1 > 1f -> (err.x1 / bmpW).coerceIn(0f, 1f)
+                else -> 0f
+            }
+            val relY1 = when {
+                err.relY1 != null && err.relY1 in 0f..1f -> err.relY1
+                err.y1 in 0f..1f -> err.y1
+                err.y1 > 1f -> (err.y1 / bmpH).coerceIn(0f, 1f)
+                else -> 0f
+            }
+            val relW = when {
+                err.relW != null && err.relW in 0f..1f -> err.relW
+                err.x2 > err.x1 && err.x2 > 1f -> ((err.x2 - err.x1) / bmpW).coerceIn(0.02f, 1f)
+                err.x2 > err.x1 && err.x2 <= 1f -> (err.x2 - err.x1).coerceIn(0.02f, 1f)
+                else -> 0.08f
+            }
+            val relH = when {
+                err.relH != null && err.relH in 0f..1f -> err.relH
+                err.y2 > err.y1 && err.y2 > 1f -> ((err.y2 - err.y1) / bmpH).coerceIn(0.02f, 1f)
+                err.y2 > err.y1 && err.y2 <= 1f -> (err.y2 - err.y1).coerceIn(0.02f, 1f)
+                else -> 0.06f
+            }
+
             ErrorBox(
                 id = err.id ?: "err_$index",
                 originalWord = err.originalWord,
@@ -169,10 +196,10 @@ class GradeRepository(
                 x2 = err.x2,
                 y2 = err.y2,
                 lineNumber = err.lineNumber,
-                rel_x1 = err.relX1 ?: err.x1,
-                rel_y1 = err.relY1 ?: err.y1,
-                rel_w = err.relW ?: (err.x2 - err.x1).coerceAtLeast(0.05f),
-                rel_h = err.relH ?: (err.y2 - err.y1).coerceAtLeast(0.04f)
+                rel_x1 = relX1,
+                rel_y1 = relY1,
+                rel_w = relW,
+                rel_h = relH
             )
         } ?: emptyList()
 
@@ -527,6 +554,7 @@ class GradeRepository(
                         correctedFullText = item.fixedText ?: "",
                         errors = errorsList,
                         processingTimeMs = item.processingTimeMs?.toLong() ?: 1200L,
+                        imageUrl = item.imagePath?.takeIf { it.isNotBlank() },
                         serverSource = "ViHand Grade Server Database (vihand.db)"
                     )
                 }
@@ -590,8 +618,76 @@ class GradeRepository(
 
     private fun parseErrorsList(json: String?): List<ErrorBox> {
         if (json.isNullOrBlank() || json == "[]") return emptyList()
+        // 1. Thử parse trực tiếp qua Moshi adapter
+        try {
+            val list = errorsAdapter.fromJson(json)
+            if (!list.isNullOrEmpty() && list.any { it.rel_x1 > 0f || it.x1 > 0f }) {
+                return list
+            }
+        } catch (_: Exception) {}
+
+        // 2. Fallback: Parse qua org.json.JSONArray để hỗ trợ định dạng Web Prisma:
+        // { "error": "...", "suggestion": "...", "error_type": "...", "reason": "...", "bbox": { "rel_x1": 0.4, ... } }
         return try {
-            errorsAdapter.fromJson(json) ?: emptyList()
+            val array = org.json.JSONArray(json)
+            val result = mutableListOf<ErrorBox>()
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                val id = obj.optString("id").ifBlank { "err_$i" }
+                val originalWord = obj.optString("originalWord").ifBlank { obj.optString("error") }
+                val correctedWord = obj.optString("correctedWord").ifBlank { obj.optString("suggestion") }
+                val errorType = obj.optString("errorType").ifBlank { obj.optString("error_type", "chinh_ta") }
+                val explanation = obj.optString("explanation").ifBlank { obj.optString("reason") }
+                val penalty = obj.optDouble("penalty", 0.5).toFloat()
+                val lineNum = obj.optInt("lineNumber", 1)
+
+                val bboxObj = obj.optJSONObject("bbox")
+                val relX = bboxObj?.optDouble("rel_x1", -1.0)?.toFloat()
+                    ?.takeIf { it >= 0f }
+                    ?: obj.optDouble("rel_x1", -1.0).toFloat().takeIf { it >= 0f }
+                    ?: obj.optDouble("x1", 0.0).toFloat()
+
+                val relY = bboxObj?.optDouble("rel_y1", -1.0)?.toFloat()
+                    ?.takeIf { it >= 0f }
+                    ?: obj.optDouble("rel_y1", -1.0).toFloat().takeIf { it >= 0f }
+                    ?: obj.optDouble("y1", 0.0).toFloat()
+
+                val relW = bboxObj?.optDouble("rel_w", -1.0)?.toFloat()
+                    ?.takeIf { it > 0f }
+                    ?: obj.optDouble("rel_w", -1.0).toFloat().takeIf { it > 0f }
+                    ?: 0.08f
+
+                val relH = bboxObj?.optDouble("rel_h", -1.0)?.toFloat()
+                    ?.takeIf { it > 0f }
+                    ?: obj.optDouble("rel_h", -1.0).toFloat().takeIf { it > 0f }
+                    ?: 0.06f
+
+                val x1 = bboxObj?.optDouble("x1", 0.0)?.toFloat() ?: obj.optDouble("x1", 0.0).toFloat()
+                val y1 = bboxObj?.optDouble("y1", 0.0)?.toFloat() ?: obj.optDouble("y1", 0.0).toFloat()
+                val x2 = bboxObj?.optDouble("x2", 0.0)?.toFloat() ?: obj.optDouble("x2", 0.0).toFloat()
+                val y2 = bboxObj?.optDouble("y2", 0.0)?.toFloat() ?: obj.optDouble("y2", 0.0).toFloat()
+
+                result.add(
+                    ErrorBox(
+                        id = id,
+                        originalWord = originalWord,
+                        correctedWord = correctedWord,
+                        errorType = errorType,
+                        explanation = explanation,
+                        penalty = penalty,
+                        x1 = x1,
+                        y1 = y1,
+                        x2 = x2,
+                        y2 = y2,
+                        lineNumber = lineNum,
+                        rel_x1 = relX,
+                        rel_y1 = relY,
+                        rel_w = relW,
+                        rel_h = relH
+                    )
+                )
+            }
+            result
         } catch (_: Exception) {
             emptyList()
         }
